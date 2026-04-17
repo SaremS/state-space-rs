@@ -5,6 +5,7 @@ build-backend = "maturin"
 [project]
 name = "state-space-rs"
 requires-python = ">=3.8"
+dependencies = ["numpy"]
 classifiers = [
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",
