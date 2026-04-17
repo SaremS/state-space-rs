@@ -48,6 +48,21 @@ state_space_rs.add(2, 3)            # 5
 | `sum_as_string` | `(a: int, b: int) -> str` | Returns the sum of two numbers as a string |
 | `add` | `(a: int, b: int) -> int` | Returns the sum of two integers |
 
+
+### Python Visualization Example
+
+A complete example that samples data, runs filtering/smoothing, and plots latent-state estimates with 90% intervals is available at:
+
+```bash
+python examples/python_visualization.py
+```
+
+This example requires `matplotlib`:
+
+```bash
+pip install matplotlib
+```
+
 ## Development Workflow
 
 After every code change, rebuild the library and re-run the tests:
