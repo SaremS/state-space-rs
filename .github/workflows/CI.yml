@@ -28,10 +28,10 @@ jobs:
       - name: Create uv venv and install maturin & pytest
         run: |
           uv venv
-          uv pip install --python .venv/bin/python maturin pytest
+          uv pip install maturin pytest
 
       - name: Build Python module
-        run: uv run --python .venv/bin/python maturin develop
+        run: uv run maturin develop
 
       - name: Python tests
-        run: uv run --python .venv/bin/python pytest tests/ -v
+        run: uv run pytest tests/ -v
