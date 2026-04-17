@@ -76,7 +76,34 @@ impl StateSpaceModel<GaussianMvDistribution> for LinearGaussianStateSpaceModel {
 
     fn filter_state(&self, observations: &Vec<DMatrix<f64>>) -> Vec<GaussianMvDistribution> {
         let num_observations = observations.len();
-        return vec![];
+
+        let mut current_state = self.initial_distribution.clone();
+
+        let mut filtered_states = vec![];
+
+        for t in 0..num_observations {
+            let next_mean = &self.transition_matrix * &current_state.mean; 
+            let next_cov = &self.transition_matrix * &current_state.cov * &self.transition_matrix.transpose() + &self.process_noise_cov;
+
+            let predicted_observation_mean = &self.observation_matrix * &next_mean;
+            let predicted_observation_cov = &self.observation_matrix * &next_cov * self.observation_matrix.transpose() + &self.observation_noise_cov;
+
+            let current_observation = &observations[t];
+
+            let current_error = current_observation - &predicted_observation_mean;
+            let kalman_gain = &next_cov * self.observation_matrix.transpose() * &predicted_observation_cov.try_inverse().unwrap();
+
+            let updated_mean = &next_mean + &kalman_gain * &current_error;
+            let updated_cov = &next_cov - &kalman_gain * &self.observation_matrix * &next_cov;
+            let filtered_current_state = GaussianMvDistribution {
+                mean: updated_mean,
+                cov: updated_cov,
+            };
+
+            filtered_states.push(filtered_current_state.clone());
+        }
+
+        return filtered_states;
     }
 
     fn smooth_state(&self, observations: &Vec<DMatrix<f64>>) -> Vec<GaussianMvDistribution> {
@@ -104,6 +131,28 @@ mod tests {
             assert_eq!(obs.cov.ncols(), size_observation);
         }
     }
+
+    #[test]
+    fn test_linear_gaussian_state_space_model_filter() {
+        let size_state = 2;
+        let size_observation = 2;
+        let model = LinearGaussianStateSpaceModel::new(size_state, size_observation);
+
+        let observations = vec![
+            DMatrix::from_vec(size_observation, 1, vec![1.0, 0.0]),
+            DMatrix::from_vec(size_observation, 1, vec![0.0, 1.0]),
+        ];
+
+        let filtered_states = model.filter_state(&observations);
+
+        assert_eq!(filtered_states.len(), observations.len());
+        for state in filtered_states {
+            assert_eq!(state.mean.len(), size_state);
+            assert_eq!(state.cov.nrows(), size_state);
+            assert_eq!(state.cov.ncols(), size_state);
+        }
+    }
 }
+
         
 
