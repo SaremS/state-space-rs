@@ -89,3 +89,17 @@ def test_sample_with_initial_state():
     assert isinstance(observations, np.ndarray)
     assert observations.shape == (num_observations, size_obs)
     assert np.all(np.isfinite(observations))
+
+
+def test_seeded_sample_is_deterministic():
+    model = LinearGaussianSSM(size_state=2, size_observation=2)
+
+    states_a, obs_a = model.sample(10, seed=42)
+    states_b, obs_b = model.sample(10, seed=42)
+
+    np.testing.assert_array_equal(states_a, states_b)
+    np.testing.assert_array_equal(obs_a, obs_b)
+
+    # Different seed gives different results
+    states_c, _ = model.sample(10, seed=99)
+    assert not np.array_equal(states_a, states_c)

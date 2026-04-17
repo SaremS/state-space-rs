@@ -1,4 +1,6 @@
 use nalgebra::{DMatrix, DVector};
+use rand::rngs::StdRng;
+use rand::SeedableRng;
 
 use crate::distributions::{MvDistribution, GaussianMvDistribution};
 
@@ -10,7 +12,15 @@ pub trait StateSpaceModel<T: MvDistribution, S: MvDistribution> {
 
     fn smooth_state(&self, observations: &Vec<DMatrix<f64>>) -> Vec<T>;
 
-    fn sample(&self, num_observations: &usize, initial_state: Option<S>) -> (Vec<DVector<f64>>, Vec<DVector<f64>>);
+    fn sample(&self, num_observations: &usize, initial_state: Option<S>, seed: Option<u64>) -> (Vec<DVector<f64>>, Vec<DVector<f64>>);
+}
+
+pub trait DifferentiableOnce {
+    fn get_gradient(&self) -> DVector<f64>;
+}
+
+pub trait DifferentiableTwice {
+    fn get_hessian(&self) -> DMatrix<f64>;
 }
 
 
@@ -150,10 +160,12 @@ impl StateSpaceModel<GaussianMvDistribution, GaussianMvDistribution> for LinearG
         return smoothed_states;
     }
 
-    fn sample(&self, num_obserations: &usize, initial_state: Option<GaussianMvDistribution>) -> (Vec<DVector<f64>>, Vec<DVector<f64>>) {
+    fn sample(&self, num_obserations: &usize, initial_state: Option<GaussianMvDistribution>, seed: Option<u64>) -> (Vec<DVector<f64>>, Vec<DVector<f64>>) {
         let mut current_state = initial_state.unwrap_or_else(|| self.initial_distribution.clone());
         let mut states = vec![];
         let mut observations = vec![];
+
+        let mut seeded_rng = seed.map(StdRng::seed_from_u64);
 
         for _ in 0..*num_obserations {
             current_state = GaussianMvDistribution {
@@ -161,7 +173,10 @@ impl StateSpaceModel<GaussianMvDistribution, GaussianMvDistribution> for LinearG
                 cov: &self.transition_matrix * &current_state.cov * self.transition_matrix.transpose() + &self.process_noise_cov,
             };
 
-            states.push(current_state.sample());
+            match seeded_rng.as_mut() {
+                Some(rng) => states.push(current_state.sample_with_rng(rng)),
+                None => states.push(current_state.sample()),
+            }
 
             let observation_mean = &self.observation_matrix * &current_state.mean;
             let observation_cov = &self.observation_matrix * &current_state.cov * self.observation_matrix.transpose() + &self.observation_noise_cov;
@@ -171,7 +186,10 @@ impl StateSpaceModel<GaussianMvDistribution, GaussianMvDistribution> for LinearG
                 cov: observation_cov,
             };
 
-            observations.push(observation_dist.sample());
+            match seeded_rng.as_mut() {
+                Some(rng) => observations.push(observation_dist.sample_with_rng(rng)),
+                None => observations.push(observation_dist.sample()),
+            }
         }
 
         return (states, observations);
@@ -247,7 +265,7 @@ mod tests {
         let size_observation = 2;
         let model = LinearGaussianStateSpaceModel::new(size_state, size_observation);
 
-        let (states, observations) = model.sample(&5, None);
+        let (states, observations) = model.sample(&5, None, None);
 
         assert_eq!(states.len(), 5);
         for state in &states {
@@ -261,7 +279,40 @@ mod tests {
             assert!(obs.iter().all(|x| x.is_finite()));
         }
     }
+
+    #[test]
+    fn test_seeded_sample_is_deterministic() {
+        let model = LinearGaussianStateSpaceModel::new(2, 2);
+
+        let (states_a, obs_a) = model.sample(&10, None, Some(42));
+        let (states_b, obs_b) = model.sample(&10, None, Some(42));
+
+        for (a, b) in states_a.iter().zip(states_b.iter()) {
+            assert_eq!(a, b);
+        }
+        for (a, b) in obs_a.iter().zip(obs_b.iter()) {
+            assert_eq!(a, b);
+        }
+
+        // Different seed produces different results
+        let (states_c, _) = model.sample(&10, None, Some(99));
+        assert_ne!(states_a, states_c);
+    }
 }
 
+
+impl DifferentiableOnce for LinearGaussianStateSpaceModel {
+    fn get_gradient(&self) -> DVector<f64> {
+        //placeholder
+        return DVector::zeros(self.size);
+    }
+}
+
+impl DifferentiableTwice for LinearGaussianStateSpaceModel {
+    fn get_hessian(&self) -> DMatrix<f64> {
+        //placeholder
+        return DMatrix::zeros(self.size, self.size);
+    }
+}
         
 

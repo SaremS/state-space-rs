@@ -106,13 +106,14 @@ mod state_space_rs {
             Ok(result.into_iter().map(gaussian_to_py).collect())
         }
 
-        #[pyo3(signature = (num_observations, initial_mean=None, initial_cov=None))]
+        #[pyo3(signature = (num_observations, initial_mean=None, initial_cov=None, seed=None))]
         fn sample<'py>(
             &self,
             py: Python<'py>,
             num_observations: usize,
             initial_mean: Option<PyReadonlyArray1<'py, f64>>,
             initial_cov: Option<PyReadonlyArray2<'py, f64>>,
+            seed: Option<u64>,
         ) -> PyResult<(Bound<'py, PyArray2<f64>>, Bound<'py, PyArray2<f64>>)> {
             let initial_state = match (initial_mean, initial_cov) {
                 (Some(mean), Some(cov)) => {
@@ -131,7 +132,7 @@ mod state_space_rs {
                 )),
             };
 
-            let (states, observations) = self.inner.sample(&num_observations, initial_state);
+            let (states, observations) = self.inner.sample(&num_observations, initial_state, seed);
 
             let state_dim = states.first().map_or(0, |s| s.len());
             let obs_dim = observations.first().map_or(0, |o| o.len());

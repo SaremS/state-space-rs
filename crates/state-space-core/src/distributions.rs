@@ -1,16 +1,27 @@
 use nalgebra::{DMatrix, DVector};
+use rand::Rng;
 use rand::rng;
 use rand_distr::{Distribution, Normal};
 
 pub trait MvDistribution: Send + Sync {
     fn log_prob(&self, x: &DVector<f64>) -> f64;
     fn sample(&self) -> DVector<f64>;
+    fn sample_with_rng(&self, rng: &mut dyn Rng) -> DVector<f64>;
 }
 
 #[derive(Clone)]
 pub struct GaussianMvDistribution {
     pub mean: DVector<f64>,
     pub cov: DMatrix<f64>,
+}
+
+impl GaussianMvDistribution {
+    fn sample_impl(&self, rng: &mut dyn Rng) -> DVector<f64> {
+        let normal = Normal::new(0.0, 1.0).unwrap();
+        let z: DVector<f64> = DVector::from_fn(self.mean.len(), |_, _| normal.sample(rng));
+        let cov_cholesky = self.cov.clone().cholesky().unwrap();
+        &self.mean + cov_cholesky.l() * z
+    }
 }
 
 impl MvDistribution for GaussianMvDistribution {
@@ -20,15 +31,15 @@ impl MvDistribution for GaussianMvDistribution {
         let diff = x - &self.mean;
         let exponent = -0.5 * diff.transpose() * cov_inv * diff;
         let log_det_cov = self.cov.determinant().ln();
-        return exponent[(0, 0)] - 0.5 * log_det_cov - 0.5 * d * (2.0 * std::f64::consts::PI).ln();
+        exponent[(0, 0)] - 0.5 * log_det_cov - 0.5 * d * (2.0 * std::f64::consts::PI).ln()
     }
 
     fn sample(&self) -> DVector<f64> {
-        let mut rng = rng();
-        let normal = Normal::new(0.0, 1.0).unwrap();
-        let z: DVector<f64> = DVector::from_fn(self.mean.len(), |_, _| normal.sample(&mut rng));
-        let cov_cholesky = self.cov.clone().cholesky().unwrap();
-        return &self.mean + cov_cholesky.l() * z;
+        self.sample_impl(&mut rng())
+    }
+
+    fn sample_with_rng(&self, rng: &mut dyn Rng) -> DVector<f64> {
+        self.sample_impl(rng)
     }
 }
 
