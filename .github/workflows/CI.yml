@@ -18,16 +18,20 @@ jobs:
         with:
           python-version: "3.12"
 
+      - uses: astral-sh/setup-uv@v6
+
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Rust tests
         run: cargo test --workspace
 
-      - name: Install maturin & pytest
-        run: pip install maturin pytest
+      - name: Create uv venv and install maturin & pytest
+        run: |
+          uv venv
+          uv pip install --python .venv/bin/python maturin pytest
 
       - name: Build Python module
-        run: maturin develop
+        run: uv run --python .venv/bin/python maturin develop
 
       - name: Python tests
-        run: pytest tests/ -v
+        run: uv run --python .venv/bin/python pytest tests/ -v
