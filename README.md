@@ -2,6 +2,12 @@
 
 A Python extension module written in Rust using [PyO3](https://pyo3.rs) and [Maturin](https://www.maturin.rs).
 
+## Comparison with statsmodels
+
+See examples/python_visualization.py
+
+![comparison](examples/statsmodels_compare.png)
+
 ## Prerequisites
 
 - [Rust](https://rustup.rs/) (stable)

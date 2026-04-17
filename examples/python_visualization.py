@@ -35,81 +35,59 @@ def _build_statsmodels(k_states, k_obs, observations):
     return kf
 
 
-def _plot_comparison(
-    title,
-    rust_means, rust_lower, rust_upper,
-    sm_means, sm_lower, sm_upper,
-    latent_states, observations,
-):
-    t = np.arange(latent_states.shape[0])
-
-    fig, (ax_state, ax_obs) = plt.subplots(2, 1, figsize=(10, 7), sharex=True)
-
-    # Rust estimates
-    ax_state.plot(t, rust_means, color="tab:blue", label="Rust estimate")
-    ax_state.fill_between(t, rust_lower, rust_upper, color="tab:blue", alpha=0.15)
-
-    # statsmodels estimates
-    ax_state.plot(t, sm_means, color="tab:red", linestyle="--", label="statsmodels estimate")
-    ax_state.fill_between(t, sm_lower, sm_upper, color="tab:red", alpha=0.10)
-
-    ax_state.scatter(t, latent_states[:, 0], color="tab:orange", s=20, zorder=5, label="True latent state")
-    ax_state.set_ylabel("Latent state")
-    ax_state.set_title(title)
-    ax_state.legend(loc="best")
-
-    ax_obs.scatter(t, observations[:, 0], color="tab:green", s=20, label="Observed")
-    ax_obs.set_xlabel("Time step")
-    ax_obs.set_ylabel("Observation")
-    ax_obs.legend(loc="best")
-
-    fig.tight_layout()
-
-
 def main():
     k_states = 1
     k_obs = 1
+    seeds = [42, 123, 7]
+    n_obs = 50
     model = LinearGaussianSSM(size_state=k_states, size_observation=k_obs)
 
-    latent_states, observations = model.sample(num_observations=50)
+    fig, axes = plt.subplots(len(seeds), 2, figsize=(14, 4 * len(seeds)), sharex=True)
 
-    # --- Rust ----------------------------------------------------------
-    filtered = model.filter_state(observations)
-    smoothed = model.smooth_state(observations)
+    for row, seed in enumerate(seeds):
+        _, observations = model.sample(num_observations=n_obs, seed=seed)
 
-    rust_filt_mean, rust_filt_lo, rust_filt_hi = _extract_mean_and_bounds(filtered)
-    rust_smooth_mean, rust_smooth_lo, rust_smooth_hi = _extract_mean_and_bounds(smoothed)
+        # Rust
+        filtered = model.filter_state(observations)
+        smoothed = model.smooth_state(observations)
+        rust_filt_mean, rust_filt_lo, rust_filt_hi = _extract_mean_and_bounds(filtered)
+        rust_smooth_mean, rust_smooth_lo, rust_smooth_hi = _extract_mean_and_bounds(smoothed)
 
-    # --- statsmodels ---------------------------------------------------
-    kf = _build_statsmodels(k_states, k_obs, observations)
+        # statsmodels
+        kf = _build_statsmodels(k_states, k_obs, observations)
+        filt_result = kf.filter()
+        sm_filt_mean = filt_result.filtered_state[0]
+        sm_filt_std = np.sqrt(filt_result.filtered_state_cov[0, 0])
+        sm_filt_lo = sm_filt_mean - Z_CRITICAL_90_PERCENT * sm_filt_std
+        sm_filt_hi = sm_filt_mean + Z_CRITICAL_90_PERCENT * sm_filt_std
 
-    filt_result = kf.filter()
-    sm_filt_mean = filt_result.filtered_state[0]
-    sm_filt_std = np.sqrt(filt_result.filtered_state_cov[0, 0])
-    sm_filt_lo = sm_filt_mean - Z_CRITICAL_90_PERCENT * sm_filt_std
-    sm_filt_hi = sm_filt_mean + Z_CRITICAL_90_PERCENT * sm_filt_std
+        smooth_result = kf.smooth()
+        sm_smooth_mean = smooth_result.smoothed_state[0]
+        sm_smooth_std = np.sqrt(smooth_result.smoothed_state_cov[0, 0])
+        sm_smooth_lo = sm_smooth_mean - Z_CRITICAL_90_PERCENT * sm_smooth_std
+        sm_smooth_hi = sm_smooth_mean + Z_CRITICAL_90_PERCENT * sm_smooth_std
 
-    smooth_result = kf.smooth()
-    sm_smooth_mean = smooth_result.smoothed_state[0]
-    sm_smooth_std = np.sqrt(smooth_result.smoothed_state_cov[0, 0])
-    sm_smooth_lo = sm_smooth_mean - Z_CRITICAL_90_PERCENT * sm_smooth_std
-    sm_smooth_hi = sm_smooth_mean + Z_CRITICAL_90_PERCENT * sm_smooth_std
+        t = np.arange(n_obs)
 
-    # --- plots ---------------------------------------------------------
-    _plot_comparison(
-        "Filtered: Rust vs statsmodels",
-        rust_filt_mean, rust_filt_lo, rust_filt_hi,
-        sm_filt_mean, sm_filt_lo, sm_filt_hi,
-        latent_states, observations,
-    )
+        for col, (title_prefix, r_mean, r_lo, r_hi, s_mean, s_lo, s_hi) in enumerate([
+            ("Filtered", rust_filt_mean, rust_filt_lo, rust_filt_hi,
+             sm_filt_mean, sm_filt_lo, sm_filt_hi),
+            ("Smoothed", rust_smooth_mean, rust_smooth_lo, rust_smooth_hi,
+             sm_smooth_mean, sm_smooth_lo, sm_smooth_hi),
+        ]):
+            ax = axes[row, col]
+            ax.plot(t, r_mean, color="tab:blue", label="Rust")
+            ax.fill_between(t, r_lo, r_hi, color="tab:blue", alpha=0.15)
+            ax.plot(t, s_mean, color="tab:red", linestyle="--", label="statsmodels")
+            ax.fill_between(t, s_lo, s_hi, color="tab:red", alpha=0.10)
+            ax.set_title(f"{title_prefix} (seed={seed})")
+            ax.set_ylabel("Latent state")
+            if row == len(seeds) - 1:
+                ax.set_xlabel("Time step")
+            if row == 0 and col == 0:
+                ax.legend(loc="best")
 
-    _plot_comparison(
-        "Smoothed: Rust vs statsmodels",
-        rust_smooth_mean, rust_smooth_lo, rust_smooth_hi,
-        sm_smooth_mean, sm_smooth_lo, sm_smooth_hi,
-        latent_states, observations,
-    )
-
+    fig.tight_layout()
     plt.show()
 
 
