@@ -2,12 +2,15 @@ use nalgebra::{DMatrix, DVector};
 
 use crate::distributions::{MvDistribution, GaussianMvDistribution};
 
-pub trait StateSpaceModel<T: MvDistribution> {
+pub trait StateSpaceModel<T: MvDistribution, S: MvDistribution> {
+    //T: observed state distribution, S: latent state distribution
     fn forecast(&self, observations: &Vec<DMatrix<f64>>, forecast_steps: &usize) -> Vec<T>;
 
     fn filter_state(&self, observations: &Vec<DMatrix<f64>>) -> Vec<T>;
 
     fn smooth_state(&self, observations: &Vec<DMatrix<f64>>) -> Vec<T>;
+
+    fn sample(&self, num_observations: &usize, initial_state: Option<S>) -> (Vec<DVector<f64>>, Vec<DVector<f64>>);
 }
 
 
@@ -84,7 +87,7 @@ impl LinearGaussianStateSpaceModel {
     }
 }
 
-impl StateSpaceModel<GaussianMvDistribution> for LinearGaussianStateSpaceModel {
+impl StateSpaceModel<GaussianMvDistribution, GaussianMvDistribution> for LinearGaussianStateSpaceModel {
     fn forecast(&self, observations: &Vec<DMatrix<f64>>, forecast_steps: &usize) -> Vec<GaussianMvDistribution> {
         let filtered_states;
 
@@ -145,6 +148,33 @@ impl StateSpaceModel<GaussianMvDistribution> for LinearGaussianStateSpaceModel {
 
         smoothed_states.reverse();
         return smoothed_states;
+    }
+
+    fn sample(&self, num_obserations: &usize, initial_state: Option<GaussianMvDistribution>) -> (Vec<DVector<f64>>, Vec<DVector<f64>>) {
+        let mut current_state = initial_state.unwrap_or_else(|| self.initial_distribution.clone());
+        let mut states = vec![];
+        let mut observations = vec![];
+
+        for _ in 0..*num_obserations {
+            current_state = GaussianMvDistribution {
+                mean: &self.transition_matrix * &current_state.mean,
+                cov: &self.transition_matrix * &current_state.cov * self.transition_matrix.transpose() + &self.process_noise_cov,
+            };
+
+            states.push(current_state.sample());
+
+            let observation_mean = &self.observation_matrix * &current_state.mean;
+            let observation_cov = &self.observation_matrix * &current_state.cov * self.observation_matrix.transpose() + &self.observation_noise_cov;
+
+            let observation_dist = GaussianMvDistribution {
+                mean: observation_mean,
+                cov: observation_cov,
+            };
+
+            observations.push(observation_dist.sample());
+        }
+
+        return (states, observations);
     }
 }
 
@@ -208,6 +238,27 @@ mod tests {
             assert_eq!(state.mean.len(), size_state);
             assert_eq!(state.cov.nrows(), size_state);
             assert_eq!(state.cov.ncols(), size_state);
+        }
+    }
+
+    #[test]
+    fn test_linear_gaussian_state_space_model_sample() {
+        let size_state = 2;
+        let size_observation = 2;
+        let model = LinearGaussianStateSpaceModel::new(size_state, size_observation);
+
+        let (states, observations) = model.sample(&5, None);
+
+        assert_eq!(states.len(), 5);
+        for state in &states {
+            assert_eq!(state.len(), size_state);
+            assert!(state.iter().all(|x| x.is_finite()));
+        }
+
+        assert_eq!(observations.len(), 5);
+        for obs in &observations {
+            assert_eq!(obs.len(), size_observation);
+            assert!(obs.iter().all(|x| x.is_finite()));
         }
     }
 }

@@ -2,9 +2,9 @@ use pyo3::prelude::*;
 
 #[pymodule]
 mod state_space_rs {
-    use nalgebra::DMatrix;
+    use nalgebra::{DMatrix, DVector};
     use numpy::ndarray::Array2;
-    use numpy::{PyArray1, PyArray2, PyReadonlyArray2};
+    use numpy::{PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
     use pyo3::prelude::*;
     use state_space_core::distributions::GaussianMvDistribution;
     use state_space_core::state_space_model::{LinearGaussianStateSpaceModel, StateSpaceModel};
@@ -104,6 +104,51 @@ mod state_space_rs {
             let obs = observations_to_dmatrices(observations);
             let result = self.inner.smooth_state(&obs);
             Ok(result.into_iter().map(gaussian_to_py).collect())
+        }
+
+        #[pyo3(signature = (num_observations, initial_mean=None, initial_cov=None))]
+        fn sample<'py>(
+            &self,
+            py: Python<'py>,
+            num_observations: usize,
+            initial_mean: Option<PyReadonlyArray1<'py, f64>>,
+            initial_cov: Option<PyReadonlyArray2<'py, f64>>,
+        ) -> PyResult<(Bound<'py, PyArray2<f64>>, Bound<'py, PyArray2<f64>>)> {
+            let initial_state = match (initial_mean, initial_cov) {
+                (Some(mean), Some(cov)) => {
+                    let mean_vec = DVector::from_vec(mean.as_slice()?.to_vec());
+                    let cov_arr = cov.as_array();
+                    let (nr, nc) = (cov_arr.nrows(), cov_arr.ncols());
+                    let cov_data: Vec<f64> = (0..nr)
+                        .flat_map(|i| (0..nc).map(move |j| cov_arr[[i, j]]))
+                        .collect();
+                    let cov_mat = DMatrix::from_row_slice(nr, nc, &cov_data);
+                    Some(GaussianMvDistribution { mean: mean_vec, cov: cov_mat })
+                }
+                (None, None) => None,
+                _ => return Err(pyo3::exceptions::PyValueError::new_err(
+                    "initial_mean and initial_cov must both be provided or both be None",
+                )),
+            };
+
+            let (states, observations) = self.inner.sample(&num_observations, initial_state);
+
+            let state_dim = states.first().map_or(0, |s| s.len());
+            let obs_dim = observations.first().map_or(0, |o| o.len());
+
+            let states_arr = Array2::from_shape_fn(
+                (states.len(), state_dim),
+                |(i, j)| states[i][j],
+            );
+            let obs_arr = Array2::from_shape_fn(
+                (observations.len(), obs_dim),
+                |(i, j)| observations[i][j],
+            );
+
+            Ok((
+                PyArray2::from_owned_array(py, states_arr),
+                PyArray2::from_owned_array(py, obs_arr),
+            ))
         }
     }
 }
