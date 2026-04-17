@@ -40,6 +40,48 @@ impl LinearGaussianStateSpaceModel {
             observation_noise_cov: DMatrix::identity(size_observation, size_observation),
         }
     }
+
+    fn filter_state_internal(&self, observations: &Vec<DMatrix<f64>>) -> (Vec<GaussianMvDistribution>, Vec<GaussianMvDistribution>) {
+        //return predicted states AND filtered states
+
+        let num_observations = observations.len();
+
+        let mut current_state = self.initial_distribution.clone();
+
+        let mut predicted_states = vec![];
+        let mut filtered_states = vec![];
+
+        for t in 0..num_observations {
+            let next_mean = &self.transition_matrix * &current_state.mean; 
+            let next_cov = &self.transition_matrix * &current_state.cov * &self.transition_matrix.transpose() + &self.process_noise_cov;
+
+            let predicted_state = GaussianMvDistribution {
+                mean: next_mean.clone(),
+                cov: next_cov.clone(),
+            };
+            predicted_states.push(predicted_state);
+
+            let predicted_observation_mean = &self.observation_matrix * &next_mean;
+            let predicted_observation_cov = &self.observation_matrix * &next_cov * self.observation_matrix.transpose() + &self.observation_noise_cov;
+
+            let current_observation = &observations[t];
+
+            let current_error = current_observation - &predicted_observation_mean;
+            let kalman_gain = &next_cov * self.observation_matrix.transpose() * &predicted_observation_cov.try_inverse().unwrap();
+
+            let updated_mean = &next_mean + &kalman_gain * &current_error;
+            let updated_cov = &next_cov - &kalman_gain * &self.observation_matrix * &next_cov;
+            let filtered_current_state = GaussianMvDistribution {
+                mean: updated_mean,
+                cov: updated_cov,
+            };
+
+            filtered_states.push(filtered_current_state.clone());
+        }
+
+        return (predicted_states, filtered_states);
+
+    }
 }
 
 impl StateSpaceModel<GaussianMvDistribution> for LinearGaussianStateSpaceModel {
@@ -75,39 +117,34 @@ impl StateSpaceModel<GaussianMvDistribution> for LinearGaussianStateSpaceModel {
     }
 
     fn filter_state(&self, observations: &Vec<DMatrix<f64>>) -> Vec<GaussianMvDistribution> {
-        let num_observations = observations.len();
-
-        let mut current_state = self.initial_distribution.clone();
-
-        let mut filtered_states = vec![];
-
-        for t in 0..num_observations {
-            let next_mean = &self.transition_matrix * &current_state.mean; 
-            let next_cov = &self.transition_matrix * &current_state.cov * &self.transition_matrix.transpose() + &self.process_noise_cov;
-
-            let predicted_observation_mean = &self.observation_matrix * &next_mean;
-            let predicted_observation_cov = &self.observation_matrix * &next_cov * self.observation_matrix.transpose() + &self.observation_noise_cov;
-
-            let current_observation = &observations[t];
-
-            let current_error = current_observation - &predicted_observation_mean;
-            let kalman_gain = &next_cov * self.observation_matrix.transpose() * &predicted_observation_cov.try_inverse().unwrap();
-
-            let updated_mean = &next_mean + &kalman_gain * &current_error;
-            let updated_cov = &next_cov - &kalman_gain * &self.observation_matrix * &next_cov;
-            let filtered_current_state = GaussianMvDistribution {
-                mean: updated_mean,
-                cov: updated_cov,
-            };
-
-            filtered_states.push(filtered_current_state.clone());
-        }
-
+        let (_, filtered_states) = self.filter_state_internal(observations);
         return filtered_states;
     }
 
     fn smooth_state(&self, observations: &Vec<DMatrix<f64>>) -> Vec<GaussianMvDistribution> {
-        return vec![];
+        let (predicted_states, filtered_states) = self.filter_state_internal(observations);
+
+        let num_observations = observations.len();
+        let mut smoothed_states = vec![filtered_states.last().unwrap().clone()];
+
+        for t in (0..num_observations-1).rev() {
+            let filtered_state = &filtered_states[t];
+            let predicted_next_state = &predicted_states[t+1];
+            let smoothed_next_state = smoothed_states.last().unwrap();
+
+            let smoothing_gain = &filtered_state.cov * self.transition_matrix.transpose() * predicted_next_state.cov.clone().try_inverse().unwrap();
+
+            let smoothed_mean = &filtered_state.mean + &smoothing_gain * (&smoothed_next_state.mean - &predicted_next_state.mean);
+            let smoothed_cov = &filtered_state.cov + &smoothing_gain * (&smoothed_next_state.cov - &predicted_next_state.cov) * smoothing_gain.transpose();
+
+            smoothed_states.push(GaussianMvDistribution {
+                mean: smoothed_mean,
+                cov: smoothed_cov,
+            });
+        }
+
+        smoothed_states.reverse();
+        return smoothed_states;
     }
 }
 
@@ -147,6 +184,27 @@ mod tests {
 
         assert_eq!(filtered_states.len(), observations.len());
         for state in filtered_states {
+            assert_eq!(state.mean.len(), size_state);
+            assert_eq!(state.cov.nrows(), size_state);
+            assert_eq!(state.cov.ncols(), size_state);
+        }
+    }
+
+    #[test]
+    fn test_linear_gaussian_state_space_model_smooth() {
+        let size_state = 2;
+        let size_observation = 2;
+        let model = LinearGaussianStateSpaceModel::new(size_state, size_observation);
+
+        let observations = vec![
+            DMatrix::from_vec(size_observation, 1, vec![1.0, 0.0]),
+            DMatrix::from_vec(size_observation, 1, vec![0.0, 1.0]),
+        ];
+
+        let smoothed_states = model.smooth_state(&observations);
+
+        assert_eq!(smoothed_states.len(), observations.len());
+        for state in smoothed_states {
             assert_eq!(state.mean.len(), size_state);
             assert_eq!(state.cov.nrows(), size_state);
             assert_eq!(state.cov.ncols(), size_state);

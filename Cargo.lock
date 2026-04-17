@@ -600,6 +600,7 @@ dependencies = [
 name = "state-space-rs"
 version = "0.1.0"
 dependencies = [
+ "nalgebra",
  "pyo3",
  "state-space-core",
 ]

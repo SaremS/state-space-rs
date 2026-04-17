@@ -12,4 +12,5 @@ crate-type = ["cdylib"]
 
 [dependencies]
 state-space-core = { path = "crates/state-space-core" }
+nalgebra = "0.34.2"
 pyo3 = "0.28.2"
