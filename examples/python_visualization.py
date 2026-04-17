@@ -4,13 +4,13 @@ import matplotlib.pyplot as plt
 from state_space_rs import LinearGaussianSSM
 
 
-Z_90 = 1.6448536269514722
+Z_SCORE_90_PERCENT = 1.6448536269514722
 
 
 def _extract_mean_and_bounds(distributions):
     means = np.array([dist.mean[0] for dist in distributions], dtype=np.float64)
     stds = np.sqrt(np.array([dist.cov[0, 0] for dist in distributions], dtype=np.float64))
-    half_width = Z_90 * stds
+    half_width = Z_SCORE_90_PERCENT * stds
     return means, means - half_width, means + half_width
 
 
