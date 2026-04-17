@@ -1,0 +1,15 @@
+[workspace]
+members = ["crates/state-space-core"]
+
+[package]
+name = "state-space-rs"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "state_space_rs"
+crate-type = ["cdylib"]
+
+[dependencies]
+state-space-core = { path = "crates/state-space-core" }
+pyo3 = "0.28.2"
