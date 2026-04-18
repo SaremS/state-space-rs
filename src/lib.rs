@@ -6,7 +6,7 @@ mod state_space_rs {
     use numpy::ndarray::{Array1, Array2};
     use numpy::{PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
     use pyo3::prelude::*;
-    use state_space_core::distributions::GaussianMvDistribution;
+    use state_space_core::distributions::{GaussianMvDistribution, MvDistribution};
     use state_space_core::state_space_model::{
         DifferentiableOnce, DifferentiableTwice, LinearGaussianStateSpaceModel,
         ParameterSet, StateSpaceModel,
@@ -34,6 +34,19 @@ mod state_space_rs {
                 self.cov_data[i * self.cov_cols + j]
             });
             PyArray2::from_owned_array(py, arr)
+        }
+
+        fn log_prob(&self, x: PyReadonlyArray1<f64>) -> PyResult<f64> {
+            let dist = self.to_inner()?;
+            Ok(dist.log_prob(&py_to_dvector(x)?))
+        }
+    }
+
+    impl PyGaussianDistribution {
+        fn to_inner(&self) -> PyResult<GaussianMvDistribution> {
+            let mean = DVector::from_vec(self.mean_data.clone());
+            let cov = DMatrix::from_row_slice(self.cov_rows, self.cov_cols, &self.cov_data);
+            Ok(GaussianMvDistribution { mean, cov })
         }
     }
 

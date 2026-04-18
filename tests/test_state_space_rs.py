@@ -263,3 +263,16 @@ def test_sample_mismatched_initial_raises():
     model = LinearGaussianSSM(2, 2)
     with pytest.raises(ValueError, match="both be provided or both be None"):
         model.sample(5, initial_mean=np.array([1.0, 2.0]))
+
+
+def test_gaussian_distribution_log_prob():
+    model = LinearGaussianSSM(2, 2)
+    observations = np.array([[1.0, 0.0], [0.0, 1.0]])
+    filtered = model.filter_state(observations)
+
+    dist = filtered[0]
+    x = np.array([0.5, 0.5])
+    lp = dist.log_prob(x)
+    assert isinstance(lp, float)
+    assert np.isfinite(lp)
+    assert lp < 0.0  # log-prob of a Gaussian is always negative away from mode
