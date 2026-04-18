@@ -37,24 +37,24 @@ pub trait DifferentiableTwice {
 
 pub struct LowerTriangularMatrix {
     size: usize,
-    diagonal: Vec<f64>,
-    lower_elements: Vec<f64>,
+    diagonal: DVector<f64>,
+    lower_elements: DVector<f64>,
 }
 
 impl LowerTriangularMatrix {
     pub fn new(size: usize) -> Self {
         Self {
             size,
-            diagonal: vec![1.0; size],
-            lower_elements: vec![0.0; size * (size - 1) / 2],
+            diagonal: Vector::ones(size),
+            lower_elements: Vector::zeros(size * (size - 1) / 2),
         }
     }
 
     pub fn new_with_values(size: usize, diagonal_value: f64, lower_value: f64) -> Self {
         Self {
             size,
-            diagonal: vec![diagonal_value; size],
-            lower_elements: vec![lower_value; size * (size - 1) / 2],
+            diagonal: Vector::from_element(size, diagonal_value),
+            lower_elements: Vector::from_element(size * (size - 1) / 2, lower_value),
         }
     }
 
@@ -68,9 +68,44 @@ impl LowerTriangularMatrix {
                 mat[(i, j)] = self.lower_elements[idx];
                 idx += 1;
             }
+
         }
 
         return mat;
+    }
+
+    pub fn get_diagonal(&self) -> DVector<f64> {
+        return self.diagonal.clone();
+    }
+
+    pub fn set_diagonal(&mut self, diagonal: DVector<f64>) {
+        self.diagonal = diagonal;
+    }
+
+    pub fn get_lower_elements(&self) -> DVector<f64> {
+        return self.lower_elements.clone();
+    }
+
+    pub fn set_lower_elements(&mut self, lower_elements: DVector<f64>) {
+        self.lower_elements = lower_elements;
+    }
+
+    pub fn get_size(&self) -> usize {
+        return self.size;
+    }
+
+    pub fn get_num_parameters(&self) -> usize {
+        return self.size + self.size * (self.size - 1) / 2;
+    }
+
+    pub fn get_parameters_as_vector(&self) -> DVector<f64> {
+        return DVector::from_iterator(self.get_num_parameters(), self.diagonal.iter().cloned().chain(self.lower_elements.iter().cloned()));
+    }
+
+    pub fn set_parameters_from_vector(&mut self, params: &DVector<f64>) {
+        let size = self.size;
+        self.diagonal = params.rows(0, size).into_owned();
+        self.lower_elements = params.rows(size, size * (size - 1) / 2).into_owned();
     }
 }
 
@@ -84,8 +119,8 @@ pub struct LinearGaussianStateSpaceParameters {
 
     pub transition_matrix: DMatrix<f64>,
     pub observation_matrix: DMatrix<f64>,
-    pub process_noise_cov_dec: DMatrix<f64>,
-    pub observation_noise_cov_dec: DMatrix<f64>,
+    pub process_noise_cov_dec: LowerTriangularMatrix, 
+    pub observation_noise_cov_dec: LowerTriangularMatrix,
 }
 
 impl LinearGaussianStateSpaceParameters {
@@ -95,12 +130,12 @@ impl LinearGaussianStateSpaceParameters {
             size_observation,
 
             initial_mean: DVector::zeros(size_state),
-            initial_cov_dec: DMatrix::identity(size_state, size_state),
+            initial_cov_dec: LowerTriangularMatrix::new(size_state).to_dense(),
 
             transition_matrix: DMatrix::identity(size_state, size_state),
             observation_matrix: DMatrix::identity(size_observation, size_state),
-            process_noise_cov_dec: DMatrix::identity(size_state, size_state),
-            observation_noise_cov_dec: DMatrix::identity(size_observation, size_observation),
+            process_noise_cov_dec: LowerTriangularMatrix::new(size_state),
+            observation_noise_cov_dec: LowerTriangularMatrix::new(size_observation),
         }
     }
 
@@ -113,11 +148,11 @@ impl LinearGaussianStateSpaceParameters {
     }
 
     pub fn get_initial_cov(&self) -> DMatrix<f64> {
-        &self.initial_cov_dec * self.initial_cov_dec.transpose()
+        &self.initial_cov_dec.to_dense() * self.initial_cov_dec.to_dense().transpose()
     }
 
-    pub fn set_initial_cov_dec(&mut self, initial_cov_dec: DMatrix<f64>) {
-        self.initial_cov_dec = initial_cov_dec;
+    pub fn set_initial_cov_dec(&mut self, non_zero_elements: &DVector<f64>) {
+        self.initial_cov_dec.set_parameters_from_vector(non_zero_elements);
     }
 
     pub fn get_transition_matrix(&self) -> DMatrix<f64> {
@@ -137,30 +172,30 @@ impl LinearGaussianStateSpaceParameters {
     }
 
     pub fn get_process_noise_cov(&self) -> DMatrix<f64> {
-        &self.process_noise_cov_dec * self.process_noise_cov_dec.transpose()
+        &self.process_noise_cov_dec.to_dense() * self.process_noise_cov_dec.to_dense().transpose()
     }
 
-    pub fn set_process_noise_cov_dec(&mut self, process_noise_cov_dec: DMatrix<f64>) {
-        self.process_noise_cov_dec = process_noise_cov_dec;
+    pub fn set_process_noise_cov_dec(&mut self, elements: &DVector<f64>) {
+        self.process_noise_cov_dec.set_parameters_from_vector(elements);
     }
 
     pub fn get_observation_noise_cov(&self) -> DMatrix<f64> {
-        &self.observation_noise_cov_dec * self.observation_noise_cov_dec.transpose()
+        &self.observation_noise_cov_dec.to_dense() * self.observation_noise_cov_dec.to_dense().transpose()
     }
 
-    pub fn set_observation_noise_cov_dec(&mut self, observation_noise_cov_dec: DMatrix<f64>) {
-        self.observation_noise_cov_dec = observation_noise_cov_dec;
+    pub fn set_observation_noise_cov_dec(&mut self, elements: &DVector<f64>) {
+        self.observation_noise_cov_dec.set_parameters_from_vector(elements);
     }
 
 }
 
 impl ParameterSet for LinearGaussianStateSpaceParameters {
     fn get_parameters(&self) -> DVector<f64> {
-        let initial_cov_dec_vector = DVector::from_iterator(self.size_state * self.size_state, self.initial_cov_dec.iter().cloned());
+        let initial_cov_dec_vector = self.initial_cov_dec.get_parameters_as_vector();
         let transition_matrix_vector = DVector::from_iterator(self.size_state * self.size_state, self.transition_matrix.iter().cloned());
         let observation_matrix_vector = DVector::from_iterator(self.size_observation * self.size_state, self.observation_matrix.iter().cloned());
-        let process_noise_cov_dec_vector = DVector::from_iterator(self.size_state * self.size_state, self.process_noise_cov_dec.iter().cloned());
-        let observation_noise_cov_dec_vector = DVector::from_iterator(self.size_observation * self.size_observation, self.observation_noise_cov_dec.iter().cloned());
+        let process_noise_cov_dec_vector = self.process_noise_cov_dec.get_parameters_as_vector();
+        let observation_noise_cov_dec_vector = self.observation_noise_cov_dec.get_parameters_as_vector();
 
         return DVector::from_iterator(
             self.size_state + 
@@ -184,8 +219,9 @@ impl ParameterSet for LinearGaussianStateSpaceParameters {
         self.initial_mean = params.rows(idx, self.size_state).into_owned();
         idx += self.size_state;
 
-        self.initial_cov_dec = DMatrix::from_iterator(self.size_state, self.size_state, params.rows(idx, self.size_state * self.size_state).iter().cloned());
-        idx += self.size_state * self.size_state;
+        let num_initial_cov_dec_params = self.initial_cov_dec.get_num_parameters();
+        self.initial_cov_dec.set_parameters_from_vector(params.rows(idx, num_initial_cov_dec_params).clone());
+        idx += num_initial_cov_dec_params;
 
         self.transition_matrix = DMatrix::from_iterator(self.size_state, self.size_state, params.rows(idx, self.size_state * self.size_state).iter().cloned());
         idx += self.size_state * self.size_state;
@@ -193,10 +229,12 @@ impl ParameterSet for LinearGaussianStateSpaceParameters {
         self.observation_matrix = DMatrix::from_iterator(self.size_observation, self.size_state, params.rows(idx, self.size_observation * self.size_state).iter().cloned());
         idx += self.size_observation * self.size_state;
 
-        self.process_noise_cov_dec = DMatrix::from_iterator(self.size_state, self.size_state, params.rows(idx, self.size_state * self.size_state).iter().cloned());
-        idx += self.size_state * self.size_state;
+        let num_process_noise_cov_dec_params = self.process_noise_cov_dec.get_num_parameters();
+        self.process_noise_cov_dec.set_parameters_from_vector(params.rows(idx, num_process_noise_cov_dec_params).clone());
+        idx += num_process_noise_cov_dec_params;
 
-        self.observation_noise_cov_dec = DMatrix::from_iterator(self.size_observation, self.size_observation, params.rows(idx, self.size_observation * self.size_observation).iter().cloned());
+        let num_observation_noise_cov_dec_params = self.observation_noise_cov_dec.get_num_parameters();
+        self.observation_noise_cov_dec.set_parameters_from_vector(params.rows(idx, num_observation_noise_cov_dec_params).clone());
     }
 }
 
