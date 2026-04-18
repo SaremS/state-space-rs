@@ -11,6 +11,12 @@ See examples/python_visualization.py
 
 ![comparison](examples/statsmodels_compare.png)
 
+## Airline Passengers Forecast
+
+Maximum-likelihood estimation on the classic airline passengers dataset using our Kalman filter and `log_likelihood`. The data is preprocessed with log, lag-1 and lag-12 differencing; the forecast reverts all transforms. See [examples/airline_forecast.py](examples/airline_forecast.py).
+
+![airline forecast](examples/airline_forecast.png)
+
 ## Prerequisites
 
 - [Rust](https://rustup.rs/) (stable)

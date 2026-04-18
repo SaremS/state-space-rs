@@ -76,11 +76,11 @@ x0 = np.array([
 
 bounds = [
     (-1.0, 1.0),       # initial_mean
-    (1e-9, 10.0),      # initial_cov_dec diagonal
+    (1e-4, 10.0),      # initial_cov_dec diagonal
     (-0.999, 0.999),   # transition (stationarity)
     (0.1, 10.0),       # observation
-    (1e-9, 10.0),      # process noise cov dec diagonal
-    (1e-9, 10.0),      # observation noise cov dec diagonal
+    (1e-4, 10.0),      # process noise cov dec diagonal
+    (1e-4, 10.0),      # observation noise cov dec diagonal
 ]
 
 result = minimize(
@@ -96,7 +96,7 @@ fitted = LinearGaussianSSM(SIZE_STATE, SIZE_OBS)
 fitted.set_parameters_from_vector(result.x)
 
 observations = y.reshape(-1, SIZE_OBS)
-forecast_dists = fitted.forecast(observations, 12)
+forecast_dists = fitted.forecast(observations, 24)
 
 forecast_means = np.array([d.mean[0] for d in forecast_dists])
 forecast_vars = np.array([d.cov[0, 0] for d in forecast_dists])
@@ -109,7 +109,7 @@ fc_lower = forecast_means - z90 * forecast_std
 
 # ── 6. Invert transforms ─────────────────────────────────────────────────────
 
-n_fc = 12
+n_fc = 24
 n_total = len(raw)
 
 
