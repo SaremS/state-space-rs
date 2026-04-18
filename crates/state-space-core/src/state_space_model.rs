@@ -8,6 +8,7 @@ use crate::distributions::{MvDistribution, GaussianMvDistribution};
 pub trait ParameterSet {
     fn get_parameters(&self) -> DVector<f64>;
     fn set_parameters(&mut self, params: &DVector<f64>);
+    fn get_num_parameters(&self) -> usize;
 }
 
 
@@ -17,6 +18,8 @@ pub trait StateSpaceModel<T: MvDistribution, S: MvDistribution> {
     fn get_parameters_as_vector(&self) -> DVector<f64>;
 
     fn set_parameters_as_vector(&mut self, params: &DVector<f64>);
+
+    fn get_num_parameters(&self) -> usize;
 
     fn forecast(&self, observations: &Vec<DMatrix<f64>>, forecast_steps: &usize) -> Vec<T>;
 
@@ -113,6 +116,7 @@ impl LowerTriangularMatrix {
 pub struct LinearGaussianStateSpaceParameters {
     size_state: usize,
     size_observation: usize,
+    num_parameters: usize,
 
     pub initial_mean: DVector<f64>,
     pub initial_cov_dec: LowerTriangularMatrix,
@@ -125,9 +129,16 @@ pub struct LinearGaussianStateSpaceParameters {
 
 impl LinearGaussianStateSpaceParameters {
     pub fn new(size_state: usize, size_observation: usize) -> Self {
+        let num_parameters = size_state  // initial_mean
+            + size_state * (size_state + 1) / 2  // initial_cov_dec
+            + size_state * size_state  // transition_matrix
+            + size_observation * size_state  // observation_matrix
+            + size_state * (size_state + 1) / 2  // process_noise_cov_dec
+            + size_observation * (size_observation + 1) / 2; // observation_noise_cov_dec
         Self {
             size_state,
             size_observation,
+            num_parameters,
 
             initial_mean: DVector::zeros(size_state),
             initial_cov_dec: LowerTriangularMatrix::new(size_state),
@@ -236,9 +247,11 @@ impl ParameterSet for LinearGaussianStateSpaceParameters {
         let num_observation_noise_cov_dec_params = self.observation_noise_cov_dec.get_num_parameters();
         self.observation_noise_cov_dec.set_parameters_from_vector(&params.rows(idx, num_observation_noise_cov_dec_params).into_owned());
     }
+
+    fn get_num_parameters(&self) -> usize {
+        return self.num_parameters;
+    }
 }
-
-
 
 pub struct LinearGaussianStateSpaceModel {
     pub parameters: LinearGaussianStateSpaceParameters
@@ -249,6 +262,21 @@ impl LinearGaussianStateSpaceModel {
         Self {
             parameters: LinearGaussianStateSpaceParameters::new(size_state, size_observation),
         }
+    }
+
+    pub fn calculate_num_parameters(size_state: usize, size_observation: usize) -> usize {
+        return size_state  // initial_mean
+            + size_state * (size_state + 1) / 2  // initial_cov_dec
+            + size_state * size_state  // transition_matrix
+            + size_observation * size_state  // observation_matrix
+            + size_state * (size_state + 1) / 2  // process_noise_cov_dec
+            + size_observation * (size_observation + 1) / 2; // observation_noise_cov_dec
+    }
+
+    pub fn new_from_parameter_vector(params: &DVector<f64>, size_state: usize, size_observation: usize) -> Self {
+        let mut model = Self::new(size_state, size_observation);
+        model.parameters.set_parameters(params);
+        return model;
     }
 
     fn filter_state_internal(&self, observations: &Vec<DMatrix<f64>>) -> (Vec<GaussianMvDistribution>, Vec<GaussianMvDistribution>) {
@@ -307,6 +335,10 @@ impl StateSpaceModel<GaussianMvDistribution, GaussianMvDistribution> for LinearG
 
     fn set_parameters_as_vector(&mut self, params: &DVector<f64>) {
         self.parameters.set_parameters(params);
+    }
+
+    fn get_num_parameters(&self) -> usize {
+        self.parameters.get_num_parameters()
     }
 
     fn forecast(&self, observations: &Vec<DMatrix<f64>>, forecast_steps: &usize) -> Vec<GaussianMvDistribution> {
