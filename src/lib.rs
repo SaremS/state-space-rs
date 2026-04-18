@@ -3,11 +3,14 @@ use pyo3::prelude::*;
 #[pymodule]
 mod state_space_rs {
     use nalgebra::{DMatrix, DVector};
-    use numpy::ndarray::Array2;
+    use numpy::ndarray::{Array1, Array2};
     use numpy::{PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
     use pyo3::prelude::*;
     use state_space_core::distributions::GaussianMvDistribution;
-    use state_space_core::state_space_model::{LinearGaussianStateSpaceModel, StateSpaceModel};
+    use state_space_core::state_space_model::{
+        DifferentiableOnce, DifferentiableTwice, LinearGaussianStateSpaceModel,
+        ParameterSet, StateSpaceModel,
+    };
 
     #[pyclass]
     #[pyo3(name = "GaussianDistribution")]
@@ -63,6 +66,29 @@ mod state_space_rs {
             .collect()
     }
 
+    fn dmatrix_to_py<'py>(py: Python<'py>, mat: &DMatrix<f64>) -> Bound<'py, PyArray2<f64>> {
+        let arr = Array2::from_shape_fn((mat.nrows(), mat.ncols()), |(i, j)| mat[(i, j)]);
+        PyArray2::from_owned_array(py, arr)
+    }
+
+    fn dvector_to_py<'py>(py: Python<'py>, vec: &DVector<f64>) -> Bound<'py, PyArray1<f64>> {
+        let arr = Array1::from_vec(vec.as_slice().to_vec());
+        PyArray1::from_owned_array(py, arr)
+    }
+
+    fn py_to_dmatrix(arr: PyReadonlyArray2<f64>) -> DMatrix<f64> {
+        let a = arr.as_array();
+        let (nr, nc) = (a.nrows(), a.ncols());
+        let data: Vec<f64> = (0..nr)
+            .flat_map(|i| (0..nc).map(move |j| a[[i, j]]))
+            .collect();
+        DMatrix::from_row_slice(nr, nc, &data)
+    }
+
+    fn py_to_dvector(arr: PyReadonlyArray1<f64>) -> PyResult<DVector<f64>> {
+        Ok(DVector::from_vec(arr.as_slice()?.to_vec()))
+    }
+
     #[pyclass]
     #[pyo3(name = "LinearGaussianSSM")]
     struct PyLinearGaussianSSM {
@@ -77,6 +103,115 @@ mod state_space_rs {
                 inner: LinearGaussianStateSpaceModel::new(size_state, size_observation),
             }
         }
+
+        #[staticmethod]
+        fn calculate_num_parameters(size_state: usize, size_observation: usize) -> usize {
+            LinearGaussianStateSpaceModel::calculate_num_parameters(size_state, size_observation)
+        }
+
+        #[staticmethod]
+        fn from_parameter_vector(
+            params: PyReadonlyArray1<f64>,
+            size_state: usize,
+            size_observation: usize,
+        ) -> PyResult<Self> {
+            let params_vec = py_to_dvector(params)?;
+            Ok(Self {
+                inner: LinearGaussianStateSpaceModel::new_from_parameter_vector(
+                    &params_vec, size_state, size_observation,
+                ),
+            })
+        }
+
+        // --- Parameter vector accessors (ParameterSet / StateSpaceModel) ---
+
+        fn get_num_parameters(&self) -> usize {
+            self.inner.get_num_parameters()
+        }
+
+        fn get_parameters_as_vector<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
+            let params = self.inner.get_parameters_as_vector();
+            dvector_to_py(py, &params)
+        }
+
+        fn set_parameters_from_vector(&mut self, params: PyReadonlyArray1<f64>) -> PyResult<()> {
+            let params_vec = py_to_dvector(params)?;
+            self.inner.set_parameters_as_vector(&params_vec);
+            Ok(())
+        }
+
+        // --- Individual parameter getters ---
+
+        fn get_initial_mean<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
+            dvector_to_py(py, &self.inner.parameters.get_initial_mean())
+        }
+
+        fn get_initial_cov<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<f64>> {
+            dmatrix_to_py(py, &self.inner.parameters.get_initial_cov())
+        }
+
+        fn get_transition_matrix<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<f64>> {
+            dmatrix_to_py(py, &self.inner.parameters.get_transition_matrix())
+        }
+
+        fn get_observation_matrix<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<f64>> {
+            dmatrix_to_py(py, &self.inner.parameters.get_observation_matrix())
+        }
+
+        fn get_process_noise_cov<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<f64>> {
+            dmatrix_to_py(py, &self.inner.parameters.get_process_noise_cov())
+        }
+
+        fn get_observation_noise_cov<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<f64>> {
+            dmatrix_to_py(py, &self.inner.parameters.get_observation_noise_cov())
+        }
+
+        // --- Individual parameter setters ---
+
+        fn set_initial_mean(&mut self, mean: PyReadonlyArray1<f64>) -> PyResult<()> {
+            self.inner.parameters.set_initial_mean(py_to_dvector(mean)?);
+            Ok(())
+        }
+
+        fn set_initial_cov_dec(&mut self, elements: PyReadonlyArray1<f64>) -> PyResult<()> {
+            let v = py_to_dvector(elements)?;
+            self.inner.parameters.set_initial_cov_dec(&v);
+            Ok(())
+        }
+
+        fn set_transition_matrix(&mut self, matrix: PyReadonlyArray2<f64>) -> PyResult<()> {
+            self.inner.parameters.set_transition_matrix(py_to_dmatrix(matrix));
+            Ok(())
+        }
+
+        fn set_observation_matrix(&mut self, matrix: PyReadonlyArray2<f64>) -> PyResult<()> {
+            self.inner.parameters.set_observation_matrix(py_to_dmatrix(matrix));
+            Ok(())
+        }
+
+        fn set_process_noise_cov_dec(&mut self, elements: PyReadonlyArray1<f64>) -> PyResult<()> {
+            let v = py_to_dvector(elements)?;
+            self.inner.parameters.set_process_noise_cov_dec(&v);
+            Ok(())
+        }
+
+        fn set_observation_noise_cov_dec(&mut self, elements: PyReadonlyArray1<f64>) -> PyResult<()> {
+            let v = py_to_dvector(elements)?;
+            self.inner.parameters.set_observation_noise_cov_dec(&v);
+            Ok(())
+        }
+
+        // --- Differentiable placeholders ---
+
+        fn get_gradient<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
+            dvector_to_py(py, &self.inner.get_gradient())
+        }
+
+        fn get_hessian<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<f64>> {
+            dmatrix_to_py(py, &self.inner.get_hessian())
+        }
+
+        // --- Core model methods ---
 
         fn forecast(
             &self,
@@ -117,13 +252,8 @@ mod state_space_rs {
         ) -> PyResult<(Bound<'py, PyArray2<f64>>, Bound<'py, PyArray2<f64>>)> {
             let initial_state = match (initial_mean, initial_cov) {
                 (Some(mean), Some(cov)) => {
-                    let mean_vec = DVector::from_vec(mean.as_slice()?.to_vec());
-                    let cov_arr = cov.as_array();
-                    let (nr, nc) = (cov_arr.nrows(), cov_arr.ncols());
-                    let cov_data: Vec<f64> = (0..nr)
-                        .flat_map(|i| (0..nc).map(move |j| cov_arr[[i, j]]))
-                        .collect();
-                    let cov_mat = DMatrix::from_row_slice(nr, nc, &cov_data);
+                    let mean_vec = py_to_dvector(mean)?;
+                    let cov_mat = py_to_dmatrix(cov);
                     Some(GaussianMvDistribution { mean: mean_vec, cov: cov_mat })
                 }
                 (None, None) => None,
