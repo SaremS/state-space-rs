@@ -35,18 +35,92 @@ pub trait DifferentiableTwice {
     fn get_hessian(&self) -> DMatrix<f64>;
 }
 
+pub struct LowerTriangularMatrix {
+    size: usize,
+    diagonal: DVector<f64>,
+    lower_elements: DVector<f64>,
+}
+
+impl LowerTriangularMatrix {
+    pub fn new(size: usize) -> Self {
+        Self {
+            size,
+            diagonal: DVector::from_element(size, 1.0),
+            lower_elements: DVector::zeros(size * (size - 1) / 2),
+        }
+    }
+
+    pub fn new_with_values(size: usize, diagonal_value: f64, lower_value: f64) -> Self {
+        Self {
+            size,
+            diagonal: DVector::from_element(size, diagonal_value),
+            lower_elements: DVector::from_element(size * (size - 1) / 2, lower_value),
+        }
+    }
+
+    pub fn to_dense(&self) -> DMatrix<f64> {
+        let mut mat = DMatrix::zeros(self.size, self.size);
+        let mut idx = 0;
+
+        for i in 0..self.size {
+            mat[(i, i)] = self.diagonal[i];
+            for j in 0..i {
+                mat[(i, j)] = self.lower_elements[idx];
+                idx += 1;
+            }
+
+        }
+
+        return mat;
+    }
+
+    pub fn get_diagonal(&self) -> DVector<f64> {
+        return self.diagonal.clone();
+    }
+
+    pub fn set_diagonal(&mut self, diagonal: DVector<f64>) {
+        self.diagonal = diagonal;
+    }
+
+    pub fn get_lower_elements(&self) -> DVector<f64> {
+        return self.lower_elements.clone();
+    }
+
+    pub fn set_lower_elements(&mut self, lower_elements: DVector<f64>) {
+        self.lower_elements = lower_elements;
+    }
+
+    pub fn get_size(&self) -> usize {
+        return self.size;
+    }
+
+    pub fn get_num_parameters(&self) -> usize {
+        return self.size + self.size * (self.size - 1) / 2;
+    }
+
+    pub fn get_parameters_as_vector(&self) -> DVector<f64> {
+        return DVector::from_iterator(self.get_num_parameters(), self.diagonal.iter().cloned().chain(self.lower_elements.iter().cloned()));
+    }
+
+    pub fn set_parameters_from_vector(&mut self, params: &DVector<f64>) {
+        let size = self.size;
+        self.diagonal = params.rows(0, size).into_owned();
+        self.lower_elements = params.rows(size, size * (size - 1) / 2).into_owned();
+    }
+}
+
 
 pub struct LinearGaussianStateSpaceParameters {
     size_state: usize,
     size_observation: usize,
 
     pub initial_mean: DVector<f64>,
-    pub initial_cov_dec: DMatrix<f64>, // cov=L*L^T
+    pub initial_cov_dec: LowerTriangularMatrix,
 
     pub transition_matrix: DMatrix<f64>,
     pub observation_matrix: DMatrix<f64>,
-    pub process_noise_cov_dec: DMatrix<f64>,
-    pub observation_noise_cov_dec: DMatrix<f64>,
+    pub process_noise_cov_dec: LowerTriangularMatrix, 
+    pub observation_noise_cov_dec: LowerTriangularMatrix,
 }
 
 impl LinearGaussianStateSpaceParameters {
@@ -56,12 +130,12 @@ impl LinearGaussianStateSpaceParameters {
             size_observation,
 
             initial_mean: DVector::zeros(size_state),
-            initial_cov_dec: DMatrix::identity(size_state, size_state),
+            initial_cov_dec: LowerTriangularMatrix::new(size_state),
 
             transition_matrix: DMatrix::identity(size_state, size_state),
             observation_matrix: DMatrix::identity(size_observation, size_state),
-            process_noise_cov_dec: DMatrix::identity(size_state, size_state),
-            observation_noise_cov_dec: DMatrix::identity(size_observation, size_observation),
+            process_noise_cov_dec: LowerTriangularMatrix::new(size_state),
+            observation_noise_cov_dec: LowerTriangularMatrix::new(size_observation),
         }
     }
 
@@ -74,11 +148,11 @@ impl LinearGaussianStateSpaceParameters {
     }
 
     pub fn get_initial_cov(&self) -> DMatrix<f64> {
-        &self.initial_cov_dec * self.initial_cov_dec.transpose()
+        &self.initial_cov_dec.to_dense() * self.initial_cov_dec.to_dense().transpose()
     }
 
-    pub fn set_initial_cov_dec(&mut self, initial_cov_dec: DMatrix<f64>) {
-        self.initial_cov_dec = initial_cov_dec;
+    pub fn set_initial_cov_dec(&mut self, non_zero_elements: &DVector<f64>) {
+        self.initial_cov_dec.set_parameters_from_vector(non_zero_elements);
     }
 
     pub fn get_transition_matrix(&self) -> DMatrix<f64> {
@@ -98,38 +172,38 @@ impl LinearGaussianStateSpaceParameters {
     }
 
     pub fn get_process_noise_cov(&self) -> DMatrix<f64> {
-        &self.process_noise_cov_dec * self.process_noise_cov_dec.transpose()
+        &self.process_noise_cov_dec.to_dense() * self.process_noise_cov_dec.to_dense().transpose()
     }
 
-    pub fn set_process_noise_cov_dec(&mut self, process_noise_cov_dec: DMatrix<f64>) {
-        self.process_noise_cov_dec = process_noise_cov_dec;
+    pub fn set_process_noise_cov_dec(&mut self, elements: &DVector<f64>) {
+        self.process_noise_cov_dec.set_parameters_from_vector(elements);
     }
 
     pub fn get_observation_noise_cov(&self) -> DMatrix<f64> {
-        &self.observation_noise_cov_dec * self.observation_noise_cov_dec.transpose()
+        &self.observation_noise_cov_dec.to_dense() * self.observation_noise_cov_dec.to_dense().transpose()
     }
 
-    pub fn set_observation_noise_cov_dec(&mut self, observation_noise_cov_dec: DMatrix<f64>) {
-        self.observation_noise_cov_dec = observation_noise_cov_dec;
+    pub fn set_observation_noise_cov_dec(&mut self, elements: &DVector<f64>) {
+        self.observation_noise_cov_dec.set_parameters_from_vector(elements);
     }
 
 }
 
 impl ParameterSet for LinearGaussianStateSpaceParameters {
     fn get_parameters(&self) -> DVector<f64> {
-        let initial_cov_dec_vector = DVector::from_iterator(self.size_state * self.size_state, self.initial_cov_dec.iter().cloned());
+        let initial_cov_dec_vector = self.initial_cov_dec.get_parameters_as_vector();
         let transition_matrix_vector = DVector::from_iterator(self.size_state * self.size_state, self.transition_matrix.iter().cloned());
         let observation_matrix_vector = DVector::from_iterator(self.size_observation * self.size_state, self.observation_matrix.iter().cloned());
-        let process_noise_cov_dec_vector = DVector::from_iterator(self.size_state * self.size_state, self.process_noise_cov_dec.iter().cloned());
-        let observation_noise_cov_dec_vector = DVector::from_iterator(self.size_observation * self.size_observation, self.observation_noise_cov_dec.iter().cloned());
+        let process_noise_cov_dec_vector = self.process_noise_cov_dec.get_parameters_as_vector();
+        let observation_noise_cov_dec_vector = self.observation_noise_cov_dec.get_parameters_as_vector();
 
         return DVector::from_iterator(
-            self.size_state + 
-            self.size_state * self.size_state + 
-            self.size_state * self.size_state + 
-            self.size_observation * self.size_state + 
-            self.size_state * self.size_state + 
-            self.size_observation * self.size_observation, 
+            self.initial_mean.len()
+                + initial_cov_dec_vector.len()
+                + transition_matrix_vector.len()
+                + observation_matrix_vector.len()
+                + process_noise_cov_dec_vector.len()
+                + observation_noise_cov_dec_vector.len(), 
             self.initial_mean.iter().cloned()
                 .chain(initial_cov_dec_vector.iter().cloned())
                 .chain(transition_matrix_vector.iter().cloned())
@@ -145,8 +219,9 @@ impl ParameterSet for LinearGaussianStateSpaceParameters {
         self.initial_mean = params.rows(idx, self.size_state).into_owned();
         idx += self.size_state;
 
-        self.initial_cov_dec = DMatrix::from_iterator(self.size_state, self.size_state, params.rows(idx, self.size_state * self.size_state).iter().cloned());
-        idx += self.size_state * self.size_state;
+        let num_initial_cov_dec_params = self.initial_cov_dec.get_num_parameters();
+        self.initial_cov_dec.set_parameters_from_vector(&params.rows(idx, num_initial_cov_dec_params).into_owned());
+        idx += num_initial_cov_dec_params;
 
         self.transition_matrix = DMatrix::from_iterator(self.size_state, self.size_state, params.rows(idx, self.size_state * self.size_state).iter().cloned());
         idx += self.size_state * self.size_state;
@@ -154,10 +229,12 @@ impl ParameterSet for LinearGaussianStateSpaceParameters {
         self.observation_matrix = DMatrix::from_iterator(self.size_observation, self.size_state, params.rows(idx, self.size_observation * self.size_state).iter().cloned());
         idx += self.size_observation * self.size_state;
 
-        self.process_noise_cov_dec = DMatrix::from_iterator(self.size_state, self.size_state, params.rows(idx, self.size_state * self.size_state).iter().cloned());
-        idx += self.size_state * self.size_state;
+        let num_process_noise_cov_dec_params = self.process_noise_cov_dec.get_num_parameters();
+        self.process_noise_cov_dec.set_parameters_from_vector(&params.rows(idx, num_process_noise_cov_dec_params).into_owned());
+        idx += num_process_noise_cov_dec_params;
 
-        self.observation_noise_cov_dec = DMatrix::from_iterator(self.size_observation, self.size_observation, params.rows(idx, self.size_observation * self.size_observation).iter().cloned());
+        let num_observation_noise_cov_dec_params = self.observation_noise_cov_dec.get_num_parameters();
+        self.observation_noise_cov_dec.set_parameters_from_vector(&params.rows(idx, num_observation_noise_cov_dec_params).into_owned());
     }
 }
 
@@ -454,6 +531,198 @@ mod tests {
         // Different seed produces different results
         let (states_c, _) = model.sample(&10, None, Some(99));
         assert_ne!(states_a, states_c);
+    }
+
+    // --- LowerTriangularMatrix tests ---
+
+    #[test]
+    fn test_lower_triangular_new() {
+        let ltm = LowerTriangularMatrix::new(3);
+        assert_eq!(ltm.get_size(), 3);
+        assert_eq!(ltm.get_diagonal(), DVector::from_element(3, 1.0));
+        assert_eq!(ltm.get_lower_elements(), DVector::zeros(3));
+        assert_eq!(ltm.get_num_parameters(), 6); // 3 + 3*(3-1)/2
+    }
+
+    #[test]
+    fn test_lower_triangular_new_with_values() {
+        let ltm = LowerTriangularMatrix::new_with_values(3, 2.0, 0.5);
+        assert_eq!(ltm.get_size(), 3);
+        assert_eq!(ltm.get_diagonal(), DVector::from_element(3, 2.0));
+        assert_eq!(ltm.get_lower_elements(), DVector::from_element(3, 0.5));
+    }
+
+    #[test]
+    fn test_lower_triangular_to_dense() {
+        let ltm = LowerTriangularMatrix::new_with_values(3, 2.0, 0.5);
+        let dense = ltm.to_dense();
+        assert_eq!(dense.nrows(), 3);
+        assert_eq!(dense.ncols(), 3);
+        // Diagonal
+        assert_eq!(dense[(0, 0)], 2.0);
+        assert_eq!(dense[(1, 1)], 2.0);
+        assert_eq!(dense[(2, 2)], 2.0);
+        // Lower elements
+        assert_eq!(dense[(1, 0)], 0.5);
+        assert_eq!(dense[(2, 0)], 0.5);
+        assert_eq!(dense[(2, 1)], 0.5);
+        // Upper triangle is zero
+        assert_eq!(dense[(0, 1)], 0.0);
+        assert_eq!(dense[(0, 2)], 0.0);
+        assert_eq!(dense[(1, 2)], 0.0);
+    }
+
+    #[test]
+    fn test_lower_triangular_set_diagonal_and_lower() {
+        let mut ltm = LowerTriangularMatrix::new(2);
+        ltm.set_diagonal(DVector::from_vec(vec![3.0, 4.0]));
+        ltm.set_lower_elements(DVector::from_vec(vec![1.5]));
+
+        assert_eq!(ltm.get_diagonal(), DVector::from_vec(vec![3.0, 4.0]));
+        assert_eq!(ltm.get_lower_elements(), DVector::from_vec(vec![1.5]));
+
+        let dense = ltm.to_dense();
+        assert_eq!(dense[(0, 0)], 3.0);
+        assert_eq!(dense[(1, 1)], 4.0);
+        assert_eq!(dense[(1, 0)], 1.5);
+    }
+
+    #[test]
+    fn test_lower_triangular_parameters_round_trip() {
+        let mut ltm = LowerTriangularMatrix::new_with_values(3, 2.0, 0.5);
+        let params = ltm.get_parameters_as_vector();
+        assert_eq!(params.len(), 6);
+        // [diag0, diag1, diag2, lower0, lower1, lower2]
+        assert_eq!(params[0], 2.0);
+        assert_eq!(params[1], 2.0);
+        assert_eq!(params[2], 2.0);
+        assert_eq!(params[3], 0.5);
+        assert_eq!(params[4], 0.5);
+        assert_eq!(params[5], 0.5);
+
+        // Modify via set_parameters_from_vector
+        let new_params = DVector::from_vec(vec![1.0, 2.0, 3.0, 0.1, 0.2, 0.3]);
+        ltm.set_parameters_from_vector(&new_params);
+        assert_eq!(ltm.get_diagonal(), DVector::from_vec(vec![1.0, 2.0, 3.0]));
+        assert_eq!(ltm.get_lower_elements(), DVector::from_vec(vec![0.1, 0.2, 0.3]));
+    }
+
+    // --- LinearGaussianStateSpaceParameters tests ---
+
+    #[test]
+    fn test_parameters_setters() {
+        let mut params = LinearGaussianStateSpaceParameters::new(2, 2);
+
+        params.set_initial_mean(DVector::from_vec(vec![1.0, 2.0]));
+        assert_eq!(params.get_initial_mean(), DVector::from_vec(vec![1.0, 2.0]));
+
+        params.set_initial_cov_dec(&DVector::from_vec(vec![2.0, 3.0, 0.5]));
+        let cov = params.get_initial_cov();
+        assert!(cov[(0, 0)] > 0.0); // L * L^T is PSD
+
+        params.set_transition_matrix(DMatrix::from_vec(2, 2, vec![0.9, 0.0, 0.0, 0.8]));
+        assert_eq!(params.get_transition_matrix()[(0, 0)], 0.9);
+
+        params.set_observation_matrix(DMatrix::from_vec(2, 2, vec![1.0, 0.0, 0.0, 1.0]));
+        assert_eq!(params.get_observation_matrix()[(0, 0)], 1.0);
+
+        params.set_process_noise_cov_dec(&DVector::from_vec(vec![0.5, 0.5, 0.1]));
+        let q = params.get_process_noise_cov();
+        assert!(q[(0, 0)] > 0.0);
+
+        params.set_observation_noise_cov_dec(&DVector::from_vec(vec![0.3, 0.3, 0.0]));
+        let r = params.get_observation_noise_cov();
+        assert!(r[(0, 0)] > 0.0);
+    }
+
+    #[test]
+    fn test_parameter_set_round_trip() {
+        let mut params = LinearGaussianStateSpaceParameters::new(2, 2);
+        params.set_initial_mean(DVector::from_vec(vec![1.0, 2.0]));
+        params.set_transition_matrix(DMatrix::from_vec(2, 2, vec![0.9, 0.0, 0.0, 0.8]));
+
+        let vec = params.get_parameters();
+        let expected_len = 2  // initial_mean
+            + 3  // initial_cov_dec (2+1)
+            + 4  // transition_matrix (2x2)
+            + 4  // observation_matrix (2x2)
+            + 3  // process_noise_cov_dec (2+1)
+            + 3; // observation_noise_cov_dec (2+1)
+        assert_eq!(vec.len(), expected_len);
+
+        // Round-trip: set_parameters then get_parameters should give same vector
+        let mut params2 = LinearGaussianStateSpaceParameters::new(2, 2);
+        params2.set_parameters(&vec);
+        let vec2 = params2.get_parameters();
+        for i in 0..vec.len() {
+            assert!((vec[i] - vec2[i]).abs() < 1e-12, "Mismatch at index {}: {} vs {}", i, vec[i], vec2[i]);
+        }
+    }
+
+    // --- StateSpaceModel trait method delegation tests ---
+
+    #[test]
+    fn test_model_get_set_parameters_as_vector() {
+        let mut model = LinearGaussianStateSpaceModel::new(2, 2);
+        let params = model.get_parameters_as_vector();
+        assert!(!params.is_empty());
+
+        // Modify and set back
+        let mut modified = params.clone();
+        modified[0] = 99.0;
+        model.set_parameters_as_vector(&modified);
+
+        let retrieved = model.get_parameters_as_vector();
+        assert_eq!(retrieved[0], 99.0);
+    }
+
+    #[test]
+    fn test_forecast_with_observations() {
+        let model = LinearGaussianStateSpaceModel::new(2, 2);
+        let observations = vec![
+            DMatrix::from_vec(2, 1, vec![1.0, 0.5]),
+            DMatrix::from_vec(2, 1, vec![0.5, 1.0]),
+            DMatrix::from_vec(2, 1, vec![1.5, 0.3]),
+        ];
+
+        let forecast = model.forecast(&observations, &2);
+        assert_eq!(forecast.len(), 2);
+        for f in &forecast {
+            assert_eq!(f.mean.len(), 2);
+            assert_eq!(f.cov.nrows(), 2);
+        }
+    }
+
+    #[test]
+    fn test_sample_with_initial_state() {
+        let model = LinearGaussianStateSpaceModel::new(2, 2);
+        let initial = GaussianMvDistribution {
+            mean: DVector::from_vec(vec![5.0, 5.0]),
+            cov: DMatrix::identity(2, 2) * 0.1,
+        };
+
+        let (states, obs) = model.sample(&5, Some(initial), Some(123));
+        assert_eq!(states.len(), 5);
+        assert_eq!(obs.len(), 5);
+    }
+
+    // --- Placeholder trait impl tests ---
+
+    #[test]
+    fn test_differentiable_once_placeholder() {
+        let model = LinearGaussianStateSpaceModel::new(2, 2);
+        let grad = model.get_gradient();
+        assert_eq!(grad.len(), 1);
+        assert_eq!(grad[0], 0.0);
+    }
+
+    #[test]
+    fn test_differentiable_twice_placeholder() {
+        let model = LinearGaussianStateSpaceModel::new(2, 2);
+        let hess = model.get_hessian();
+        assert_eq!(hess.nrows(), 1);
+        assert_eq!(hess.ncols(), 1);
+        assert_eq!(hess[(0, 0)], 0.0);
     }
 }
 
