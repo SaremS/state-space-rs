@@ -45,16 +45,16 @@ impl LowerTriangularMatrix {
     pub fn new(size: usize) -> Self {
         Self {
             size,
-            diagonal: Vector::ones(size),
-            lower_elements: Vector::zeros(size * (size - 1) / 2),
+            diagonal: DVector::from_element(size, 1.0),
+            lower_elements: DVector::zeros(size * (size - 1) / 2),
         }
     }
 
     pub fn new_with_values(size: usize, diagonal_value: f64, lower_value: f64) -> Self {
         Self {
             size,
-            diagonal: Vector::from_element(size, diagonal_value),
-            lower_elements: Vector::from_element(size * (size - 1) / 2, lower_value),
+            diagonal: DVector::from_element(size, diagonal_value),
+            lower_elements: DVector::from_element(size * (size - 1) / 2, lower_value),
         }
     }
 
@@ -115,7 +115,7 @@ pub struct LinearGaussianStateSpaceParameters {
     size_observation: usize,
 
     pub initial_mean: DVector<f64>,
-    pub initial_cov_dec: DMatrix<f64>, // cov=L*L^T
+    pub initial_cov_dec: LowerTriangularMatrix,
 
     pub transition_matrix: DMatrix<f64>,
     pub observation_matrix: DMatrix<f64>,
@@ -130,7 +130,7 @@ impl LinearGaussianStateSpaceParameters {
             size_observation,
 
             initial_mean: DVector::zeros(size_state),
-            initial_cov_dec: LowerTriangularMatrix::new(size_state).to_dense(),
+            initial_cov_dec: LowerTriangularMatrix::new(size_state),
 
             transition_matrix: DMatrix::identity(size_state, size_state),
             observation_matrix: DMatrix::identity(size_observation, size_state),
@@ -198,12 +198,12 @@ impl ParameterSet for LinearGaussianStateSpaceParameters {
         let observation_noise_cov_dec_vector = self.observation_noise_cov_dec.get_parameters_as_vector();
 
         return DVector::from_iterator(
-            self.size_state + 
-            self.size_state * self.size_state + 
-            self.size_state * self.size_state + 
-            self.size_observation * self.size_state + 
-            self.size_state * self.size_state + 
-            self.size_observation * self.size_observation, 
+            self.initial_mean.len()
+                + initial_cov_dec_vector.len()
+                + transition_matrix_vector.len()
+                + observation_matrix_vector.len()
+                + process_noise_cov_dec_vector.len()
+                + observation_noise_cov_dec_vector.len(), 
             self.initial_mean.iter().cloned()
                 .chain(initial_cov_dec_vector.iter().cloned())
                 .chain(transition_matrix_vector.iter().cloned())
@@ -220,7 +220,7 @@ impl ParameterSet for LinearGaussianStateSpaceParameters {
         idx += self.size_state;
 
         let num_initial_cov_dec_params = self.initial_cov_dec.get_num_parameters();
-        self.initial_cov_dec.set_parameters_from_vector(params.rows(idx, num_initial_cov_dec_params).clone());
+        self.initial_cov_dec.set_parameters_from_vector(&params.rows(idx, num_initial_cov_dec_params).into_owned());
         idx += num_initial_cov_dec_params;
 
         self.transition_matrix = DMatrix::from_iterator(self.size_state, self.size_state, params.rows(idx, self.size_state * self.size_state).iter().cloned());
@@ -230,11 +230,11 @@ impl ParameterSet for LinearGaussianStateSpaceParameters {
         idx += self.size_observation * self.size_state;
 
         let num_process_noise_cov_dec_params = self.process_noise_cov_dec.get_num_parameters();
-        self.process_noise_cov_dec.set_parameters_from_vector(params.rows(idx, num_process_noise_cov_dec_params).clone());
+        self.process_noise_cov_dec.set_parameters_from_vector(&params.rows(idx, num_process_noise_cov_dec_params).into_owned());
         idx += num_process_noise_cov_dec_params;
 
         let num_observation_noise_cov_dec_params = self.observation_noise_cov_dec.get_num_parameters();
-        self.observation_noise_cov_dec.set_parameters_from_vector(params.rows(idx, num_observation_noise_cov_dec_params).clone());
+        self.observation_noise_cov_dec.set_parameters_from_vector(&params.rows(idx, num_observation_noise_cov_dec_params).into_owned());
     }
 }
 
