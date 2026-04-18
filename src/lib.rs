@@ -23,6 +23,20 @@ mod state_space_rs {
 
     #[pymethods]
     impl PyGaussianDistribution {
+        #[new]
+        fn py_new(mean: PyReadonlyArray1<f64>, cov: PyReadonlyArray2<f64>) -> Self {
+            let mean_data = mean.as_slice().unwrap().to_vec();
+            let cov_arr = cov.as_array();
+            let (cov_rows, cov_cols) = (cov_arr.nrows(), cov_arr.ncols());
+            let mut cov_data = Vec::with_capacity(cov_rows * cov_cols);
+            for i in 0..cov_rows {
+                for j in 0..cov_cols {
+                    cov_data.push(cov_arr[[i, j]]);
+                }
+            }
+            PyGaussianDistribution { mean_data, cov_data, cov_rows, cov_cols }
+        }
+
         #[getter]
         fn mean<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
             PyArray1::from_slice(py, &self.mean_data)
@@ -222,6 +236,13 @@ mod state_space_rs {
 
         fn get_hessian<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<f64>> {
             dmatrix_to_py(py, &self.inner.get_hessian())
+        }
+
+        // --- Log-likelihood ---
+
+        fn log_likelihood(&self, observations: PyReadonlyArray2<f64>) -> f64 {
+            let obs = observations_to_dmatrices(observations);
+            self.inner.log_likelihood(&obs)
         }
 
         // --- Core model methods ---

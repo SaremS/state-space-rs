@@ -265,6 +265,18 @@ def test_sample_mismatched_initial_raises():
         model.sample(5, initial_mean=np.array([1.0, 2.0]))
 
 
+# --- Log-likelihood ---
+
+
+def test_log_likelihood():
+    model = LinearGaussianSSM(2, 2)
+    observations = np.array([[1.0, 0.0], [0.0, 1.0], [0.5, 0.5]])
+    ll = model.log_likelihood(observations)
+    assert isinstance(ll, float)
+    assert np.isfinite(ll)
+    assert ll < 0.0  # log-likelihood of Gaussian is negative for non-degenerate cases
+
+
 def test_gaussian_distribution_log_prob():
     model = LinearGaussianSSM(2, 2)
     observations = np.array([[1.0, 0.0], [0.0, 1.0]])
