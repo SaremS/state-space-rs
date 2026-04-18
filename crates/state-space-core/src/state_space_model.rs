@@ -532,6 +532,198 @@ mod tests {
         let (states_c, _) = model.sample(&10, None, Some(99));
         assert_ne!(states_a, states_c);
     }
+
+    // --- LowerTriangularMatrix tests ---
+
+    #[test]
+    fn test_lower_triangular_new() {
+        let ltm = LowerTriangularMatrix::new(3);
+        assert_eq!(ltm.get_size(), 3);
+        assert_eq!(ltm.get_diagonal(), DVector::from_element(3, 1.0));
+        assert_eq!(ltm.get_lower_elements(), DVector::zeros(3));
+        assert_eq!(ltm.get_num_parameters(), 6); // 3 + 3*(3-1)/2
+    }
+
+    #[test]
+    fn test_lower_triangular_new_with_values() {
+        let ltm = LowerTriangularMatrix::new_with_values(3, 2.0, 0.5);
+        assert_eq!(ltm.get_size(), 3);
+        assert_eq!(ltm.get_diagonal(), DVector::from_element(3, 2.0));
+        assert_eq!(ltm.get_lower_elements(), DVector::from_element(3, 0.5));
+    }
+
+    #[test]
+    fn test_lower_triangular_to_dense() {
+        let ltm = LowerTriangularMatrix::new_with_values(3, 2.0, 0.5);
+        let dense = ltm.to_dense();
+        assert_eq!(dense.nrows(), 3);
+        assert_eq!(dense.ncols(), 3);
+        // Diagonal
+        assert_eq!(dense[(0, 0)], 2.0);
+        assert_eq!(dense[(1, 1)], 2.0);
+        assert_eq!(dense[(2, 2)], 2.0);
+        // Lower elements
+        assert_eq!(dense[(1, 0)], 0.5);
+        assert_eq!(dense[(2, 0)], 0.5);
+        assert_eq!(dense[(2, 1)], 0.5);
+        // Upper triangle is zero
+        assert_eq!(dense[(0, 1)], 0.0);
+        assert_eq!(dense[(0, 2)], 0.0);
+        assert_eq!(dense[(1, 2)], 0.0);
+    }
+
+    #[test]
+    fn test_lower_triangular_set_diagonal_and_lower() {
+        let mut ltm = LowerTriangularMatrix::new(2);
+        ltm.set_diagonal(DVector::from_vec(vec![3.0, 4.0]));
+        ltm.set_lower_elements(DVector::from_vec(vec![1.5]));
+
+        assert_eq!(ltm.get_diagonal(), DVector::from_vec(vec![3.0, 4.0]));
+        assert_eq!(ltm.get_lower_elements(), DVector::from_vec(vec![1.5]));
+
+        let dense = ltm.to_dense();
+        assert_eq!(dense[(0, 0)], 3.0);
+        assert_eq!(dense[(1, 1)], 4.0);
+        assert_eq!(dense[(1, 0)], 1.5);
+    }
+
+    #[test]
+    fn test_lower_triangular_parameters_round_trip() {
+        let mut ltm = LowerTriangularMatrix::new_with_values(3, 2.0, 0.5);
+        let params = ltm.get_parameters_as_vector();
+        assert_eq!(params.len(), 6);
+        // [diag0, diag1, diag2, lower0, lower1, lower2]
+        assert_eq!(params[0], 2.0);
+        assert_eq!(params[1], 2.0);
+        assert_eq!(params[2], 2.0);
+        assert_eq!(params[3], 0.5);
+        assert_eq!(params[4], 0.5);
+        assert_eq!(params[5], 0.5);
+
+        // Modify via set_parameters_from_vector
+        let new_params = DVector::from_vec(vec![1.0, 2.0, 3.0, 0.1, 0.2, 0.3]);
+        ltm.set_parameters_from_vector(&new_params);
+        assert_eq!(ltm.get_diagonal(), DVector::from_vec(vec![1.0, 2.0, 3.0]));
+        assert_eq!(ltm.get_lower_elements(), DVector::from_vec(vec![0.1, 0.2, 0.3]));
+    }
+
+    // --- LinearGaussianStateSpaceParameters tests ---
+
+    #[test]
+    fn test_parameters_setters() {
+        let mut params = LinearGaussianStateSpaceParameters::new(2, 2);
+
+        params.set_initial_mean(DVector::from_vec(vec![1.0, 2.0]));
+        assert_eq!(params.get_initial_mean(), DVector::from_vec(vec![1.0, 2.0]));
+
+        params.set_initial_cov_dec(&DVector::from_vec(vec![2.0, 3.0, 0.5]));
+        let cov = params.get_initial_cov();
+        assert!(cov[(0, 0)] > 0.0); // L * L^T is PSD
+
+        params.set_transition_matrix(DMatrix::from_vec(2, 2, vec![0.9, 0.0, 0.0, 0.8]));
+        assert_eq!(params.get_transition_matrix()[(0, 0)], 0.9);
+
+        params.set_observation_matrix(DMatrix::from_vec(2, 2, vec![1.0, 0.0, 0.0, 1.0]));
+        assert_eq!(params.get_observation_matrix()[(0, 0)], 1.0);
+
+        params.set_process_noise_cov_dec(&DVector::from_vec(vec![0.5, 0.5, 0.1]));
+        let q = params.get_process_noise_cov();
+        assert!(q[(0, 0)] > 0.0);
+
+        params.set_observation_noise_cov_dec(&DVector::from_vec(vec![0.3, 0.3, 0.0]));
+        let r = params.get_observation_noise_cov();
+        assert!(r[(0, 0)] > 0.0);
+    }
+
+    #[test]
+    fn test_parameter_set_round_trip() {
+        let mut params = LinearGaussianStateSpaceParameters::new(2, 2);
+        params.set_initial_mean(DVector::from_vec(vec![1.0, 2.0]));
+        params.set_transition_matrix(DMatrix::from_vec(2, 2, vec![0.9, 0.0, 0.0, 0.8]));
+
+        let vec = params.get_parameters();
+        let expected_len = 2  // initial_mean
+            + 3  // initial_cov_dec (2+1)
+            + 4  // transition_matrix (2x2)
+            + 4  // observation_matrix (2x2)
+            + 3  // process_noise_cov_dec (2+1)
+            + 3; // observation_noise_cov_dec (2+1)
+        assert_eq!(vec.len(), expected_len);
+
+        // Round-trip: set_parameters then get_parameters should give same vector
+        let mut params2 = LinearGaussianStateSpaceParameters::new(2, 2);
+        params2.set_parameters(&vec);
+        let vec2 = params2.get_parameters();
+        for i in 0..vec.len() {
+            assert!((vec[i] - vec2[i]).abs() < 1e-12, "Mismatch at index {}: {} vs {}", i, vec[i], vec2[i]);
+        }
+    }
+
+    // --- StateSpaceModel trait method delegation tests ---
+
+    #[test]
+    fn test_model_get_set_parameters_as_vector() {
+        let mut model = LinearGaussianStateSpaceModel::new(2, 2);
+        let params = model.get_parameters_as_vector();
+        assert!(!params.is_empty());
+
+        // Modify and set back
+        let mut modified = params.clone();
+        modified[0] = 99.0;
+        model.set_parameters_as_vector(&modified);
+
+        let retrieved = model.get_parameters_as_vector();
+        assert_eq!(retrieved[0], 99.0);
+    }
+
+    #[test]
+    fn test_forecast_with_observations() {
+        let model = LinearGaussianStateSpaceModel::new(2, 2);
+        let observations = vec![
+            DMatrix::from_vec(2, 1, vec![1.0, 0.5]),
+            DMatrix::from_vec(2, 1, vec![0.5, 1.0]),
+            DMatrix::from_vec(2, 1, vec![1.5, 0.3]),
+        ];
+
+        let forecast = model.forecast(&observations, &2);
+        assert_eq!(forecast.len(), 2);
+        for f in &forecast {
+            assert_eq!(f.mean.len(), 2);
+            assert_eq!(f.cov.nrows(), 2);
+        }
+    }
+
+    #[test]
+    fn test_sample_with_initial_state() {
+        let model = LinearGaussianStateSpaceModel::new(2, 2);
+        let initial = GaussianMvDistribution {
+            mean: DVector::from_vec(vec![5.0, 5.0]),
+            cov: DMatrix::identity(2, 2) * 0.1,
+        };
+
+        let (states, obs) = model.sample(&5, Some(initial), Some(123));
+        assert_eq!(states.len(), 5);
+        assert_eq!(obs.len(), 5);
+    }
+
+    // --- Placeholder trait impl tests ---
+
+    #[test]
+    fn test_differentiable_once_placeholder() {
+        let model = LinearGaussianStateSpaceModel::new(2, 2);
+        let grad = model.get_gradient();
+        assert_eq!(grad.len(), 1);
+        assert_eq!(grad[0], 0.0);
+    }
+
+    #[test]
+    fn test_differentiable_twice_placeholder() {
+        let model = LinearGaussianStateSpaceModel::new(2, 2);
+        let hess = model.get_hessian();
+        assert_eq!(hess.nrows(), 1);
+        assert_eq!(hess.ncols(), 1);
+        assert_eq!(hess[(0, 0)], 0.0);
+    }
 }
 
 

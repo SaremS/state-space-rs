@@ -1,5 +1,8 @@
 # state-space-rs
 
+[![CI](https://github.com/SaremS/state-space-rs/actions/workflows/CI.yml/badge.svg)](https://github.com/SaremS/state-space-rs/actions/workflows/CI.yml)
+[![codecov](https://codecov.io/gh/SaremS/state-space-rs/branch/master/graph/badge.svg)](https://codecov.io/gh/SaremS/state-space-rs)
+
 A Python extension module written in Rust using [PyO3](https://pyo3.rs) and [Maturin](https://www.maturin.rs).
 
 ## Comparison with statsmodels
