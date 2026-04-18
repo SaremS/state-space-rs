@@ -35,6 +35,45 @@ pub trait DifferentiableTwice {
     fn get_hessian(&self) -> DMatrix<f64>;
 }
 
+pub struct LowerTriangularMatrix {
+    size: usize,
+    diagonal: Vec<f64>,
+    lower_elements: Vec<f64>,
+}
+
+impl LowerTriangularMatrix {
+    pub fn new(size: usize) -> Self {
+        Self {
+            size,
+            diagonal: vec![1.0; size],
+            lower_elements: vec![0.0; size * (size - 1) / 2],
+        }
+    }
+
+    pub fn new_with_values(size: usize, diagonal_value: f64, lower_value: f64) -> Self {
+        Self {
+            size,
+            diagonal: vec![diagonal_value; size],
+            lower_elements: vec![lower_value; size * (size - 1) / 2],
+        }
+    }
+
+    pub fn to_dense(&self) -> DMatrix<f64> {
+        let mut mat = DMatrix::zeros(self.size, self.size);
+        let mut idx = 0;
+
+        for i in 0..self.size {
+            mat[(i, i)] = self.diagonal[i];
+            for j in 0..i {
+                mat[(i, j)] = self.lower_elements[idx];
+                idx += 1;
+            }
+        }
+
+        return mat;
+    }
+}
+
 
 pub struct LinearGaussianStateSpaceParameters {
     size_state: usize,
