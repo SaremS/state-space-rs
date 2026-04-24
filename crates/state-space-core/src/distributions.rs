@@ -1,21 +1,21 @@
 use nalgebra::{DMatrix, DVector};
 use rand::Rng;
 use rand::rng;
-use rand_distr::{Distribution, Normal};
+use rand_distr::{Distribution as Dist, Normal};
 
-pub trait MvDistribution: Send + Sync {
-    fn log_prob(&self, x: &DVector<f64>) -> f64;
+pub trait Distribution: Send + Sync {
+    fn log_prob(&self, x: &DVector<f64>) -> anyhow::Result<f64>;
     fn sample(&self) -> DVector<f64>;
     fn sample_with_rng(&self, rng: &mut dyn Rng) -> DVector<f64>;
 }
 
 #[derive(Clone)]
-pub struct GaussianMvDistribution {
+pub struct GaussianDistribution {
     pub mean: DVector<f64>,
     pub cov: DMatrix<f64>,
 }
 
-impl GaussianMvDistribution {
+impl GaussianDistribution {
     fn sample_impl(&self, rng: &mut dyn Rng) -> DVector<f64> {
         let normal = Normal::new(0.0, 1.0).unwrap();
         let z: DVector<f64> = DVector::from_fn(self.mean.len(), |_, _| normal.sample(rng));
@@ -24,14 +24,16 @@ impl GaussianMvDistribution {
     }
 }
 
-impl MvDistribution for GaussianMvDistribution {
-    fn log_prob(&self, x: &DVector<f64>) -> f64 {
+impl Distribution for GaussianDistribution {
+    fn log_prob(&self, x: &DVector<f64>) -> anyhow::Result<f64> {
         let d = self.mean.len() as f64;
-        let cov_inv = self.cov.clone().try_inverse().unwrap();
+        let cov_inv = self.cov.clone().try_inverse()?;
         let diff = x - &self.mean;
         let exponent = -0.5 * diff.transpose() * cov_inv * diff;
         let log_det_cov = self.cov.determinant().ln();
-        exponent[(0, 0)] - 0.5 * log_det_cov - 0.5 * d * (2.0 * std::f64::consts::PI).ln()
+
+        let result = exponent[(0, 0)] - 0.5 * log_det_cov - 0.5 * d * (2.0 * std::f64::consts::PI).ln();
+        Ok(result)
     }
 
     fn sample(&self) -> DVector<f64> {
@@ -53,17 +55,17 @@ mod tests {
 
     #[test]
     fn test_gaussian_is_send_sync() {
-        _assert_send_sync::<GaussianMvDistribution>();
+        _assert_send_sync::<GaussianDistribution>();
     }
 
     #[test]
     fn test_gaussian_log_prob() {
         let mean = DVector::from_vec(vec![0.0, 0.0]);
         let cov = DMatrix::identity(2, 2);
-        let dist = GaussianMvDistribution { mean, cov };
+        let dist = GaussianDistribution { mean, cov };
 
         let x = DVector::from_vec(vec![1.0, 1.0]);
-        let log_prob = dist.log_prob(&x);
+        let log_prob = dist.log_prob(&x).unwrap();
         assert!(log_prob < 0.0);
     }
 
@@ -71,7 +73,7 @@ mod tests {
     fn test_gaussian_sample() {
         let mean = DVector::from_vec(vec![0.0, 0.0]);
         let cov = DMatrix::identity(2, 2);
-        let dist = GaussianMvDistribution { mean, cov };
+        let dist = GaussianDistribution { mean, cov };
 
         let sample = dist.sample();
         assert_eq!(sample.len(), 2);

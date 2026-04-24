@@ -6,7 +6,7 @@ mod state_space_rs {
     use numpy::ndarray::{Array1, Array2};
     use numpy::{PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
     use pyo3::prelude::*;
-    use state_space_core::distributions::{GaussianMvDistribution, MvDistribution};
+    use state_space_core::distributions::{GaussianDistribution, Distribution};
     use state_space_core::state_space_model::{
         DifferentiableOnce, DifferentiableTwice, LinearGaussianStateSpaceModel,
         ParameterSet, StateSpaceModel,
@@ -57,14 +57,14 @@ mod state_space_rs {
     }
 
     impl PyGaussianDistribution {
-        fn to_inner(&self) -> PyResult<GaussianMvDistribution> {
+        fn to_inner(&self) -> PyResult<GaussianDistribution> {
             let mean = DVector::from_vec(self.mean_data.clone());
             let cov = DMatrix::from_row_slice(self.cov_rows, self.cov_cols, &self.cov_data);
-            Ok(GaussianMvDistribution { mean, cov })
+            Ok(GaussianDistribution { mean, cov })
         }
     }
 
-    fn gaussian_to_py(dist: GaussianMvDistribution) -> PyGaussianDistribution {
+    fn gaussian_to_py(dist: GaussianDistribution) -> PyGaussianDistribution {
         let mean_data = dist.mean.as_slice().to_vec();
         let nrows = dist.cov.nrows();
         let ncols = dist.cov.ncols();
@@ -288,7 +288,7 @@ mod state_space_rs {
                 (Some(mean), Some(cov)) => {
                     let mean_vec = py_to_dvector(mean)?;
                     let cov_mat = py_to_dmatrix(cov);
-                    Some(GaussianMvDistribution { mean: mean_vec, cov: cov_mat })
+                    Some(GaussianDistribution { mean: mean_vec, cov: cov_mat })
                 }
                 (None, None) => None,
                 _ => return Err(pyo3::exceptions::PyValueError::new_err(
