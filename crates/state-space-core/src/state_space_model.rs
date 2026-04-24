@@ -307,8 +307,8 @@ impl LinearGaussianStateSpaceModel {
 
         let num_observations = observations.len();
 
-        let mut current_state_mean = self.parameters.get_initial_mean();
-        let mut current_state_cov = self.parameters.get_initial_cov();
+        let current_state_mean = self.parameters.get_initial_mean();
+        let current_state_cov = self.parameters.get_initial_cov();
 
         let transition_matrix = self.parameters.get_transition_matrix();
         let observation_matrix = self.parameters.get_observation_matrix();
