@@ -27,12 +27,17 @@ impl GaussianDistribution {
 impl Distribution for GaussianDistribution {
     fn log_prob(&self, x: &DVector<f64>) -> anyhow::Result<f64> {
         let d = self.mean.len() as f64;
-        let cov_inv = self.cov.clone().try_inverse().ok_or_else(|| anyhow::anyhow!("Covariance matrix is not invertible"))?;
+        let cov_inv = self
+            .cov
+            .clone()
+            .try_inverse()
+            .ok_or_else(|| anyhow::anyhow!("Covariance matrix is not invertible"))?;
         let diff = x - &self.mean;
         let exponent = -0.5 * diff.transpose() * cov_inv * diff;
         let log_det_cov = self.cov.determinant().ln();
 
-        let result = exponent[(0, 0)] - 0.5 * log_det_cov - 0.5 * d * (2.0 * std::f64::consts::PI).ln();
+        let result =
+            exponent[(0, 0)] - 0.5 * log_det_cov - 0.5 * d * (2.0 * std::f64::consts::PI).ln();
         Ok(result)
     }
 
@@ -44,7 +49,6 @@ impl Distribution for GaussianDistribution {
         self.sample_impl(rng)
     }
 }
-
 
 #[cfg(test)]
 mod tests {
