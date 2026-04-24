@@ -279,7 +279,7 @@ impl LinearGaussianStateSpaceModel {
         return model;
     }
 
-    pub fn log_likelihood(&self, observations: &Vec<DMatrix<f64>>) -> f64 {
+    pub fn log_likelihood(&self, observations: &Vec<DMatrix<f64>>) -> anyhow::Result<f64> {
         let filtered_states = self.filter_state(observations);
         let observation_matrix = self.parameters.get_observation_matrix();
         let observation_noise_cov = self.parameters.get_observation_noise_cov();
@@ -296,10 +296,10 @@ impl LinearGaussianStateSpaceModel {
             };
 
             let obs_vec = obs.column(0).into_owned();
-            log_likelihood += obs_dist.log_prob(&obs_vec);
+            log_likelihood += obs_dist.log_prob(&obs_vec)?;
         }
 
-        return log_likelihood;
+        Ok(log_likelihood)
     }
 
     fn filter_state_internal(&self, observations: &Vec<DMatrix<f64>>) -> (Vec<GaussianDistribution>, Vec<GaussianDistribution>) {
