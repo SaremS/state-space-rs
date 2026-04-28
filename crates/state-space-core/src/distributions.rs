@@ -6,11 +6,13 @@ use rand_distr::{Distribution as Dist, Normal};
 use crate::linear_algebra::LowerTriangularMatrix;
 use crate::parameter_set::ParameterSet;
 
-pub trait Distribution<T: ParameterSet>: Send + Sync {
+pub trait Distribution: Send + Sync {
+    type Parameters: ParameterSet;
+
     fn new() -> Self
     where
         Self: Sized;
-    fn new_from_parameter_set(parameter_set: T) -> Self
+    fn new_from_parameter_set(parameter_set: Self::Parameters) -> Self
     where
         Self: Sized;
     fn log_prob(&self, x: &DVector<f64>) -> anyhow::Result<f64>;
@@ -67,7 +69,9 @@ impl GaussianDistribution {
     }
 }
 
-impl Distribution<GaussianParameterSet> for GaussianDistribution {
+impl Distribution for GaussianDistribution {
+    type Parameters = GaussianParameterSet;
+
     fn new() -> Self {
         let parameter_set = GaussianParameterSet {
             mean: DVector::zeros(1),
@@ -161,7 +165,9 @@ impl CenteredGaussianDistribution {
     }
 }
 
-impl Distribution<CenteredGaussianParameterSet> for CenteredGaussianDistribution {
+impl Distribution for CenteredGaussianDistribution {
+    type Parameters = CenteredGaussianParameterSet;
+
     fn new() -> Self {
         let parameter_set = CenteredGaussianParameterSet {
             cov: LowerTriangularMatrix::new(1),

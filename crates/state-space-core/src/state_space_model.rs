@@ -11,12 +11,6 @@ use crate::{
 
 pub trait StateSpaceModel<
     ModelParms,
-    InitialStateParms,
-    StateParms,
-    ObsParms,
-    ForcParms,
-    FiltParms,
-    SmoothParms,
     InitialStateDist,
     StateDist,
     ObsDist,
@@ -25,18 +19,12 @@ pub trait StateSpaceModel<
     SmoothDist,
 > where
     ModelParms: ParameterSet,
-    InitialStateParms: ParameterSet,
-    StateParms: ParameterSet,
-    ObsParms: ParameterSet,
-    ForcParms: ParameterSet,
-    FiltParms: ParameterSet,
-    SmoothParms: ParameterSet,
-    InitialStateDist: Distribution<InitialStateParms>,
-    StateDist: Distribution<StateParms>,
-    ObsDist: Distribution<ObsParms>,
-    ForcDist: Distribution<ForcParms>,
-    FiltDist: Distribution<FiltParms>,
-    SmoothDist: Distribution<SmoothParms>,
+    InitialStateDist: Distribution,
+    StateDist: Distribution,
+    ObsDist: Distribution,
+    ForcDist: Distribution,
+    FiltDist: Distribution,
+    SmoothDist: Distribution,
 {
     fn get_parameters_as_vector(&self) -> DVector<f64>;
     fn set_parameters_as_vector(&mut self, params: &DVector<f64>);
@@ -69,19 +57,13 @@ pub trait StateSpaceModel<
 }
 
 pub struct LinearStateSpaceParameters<
-    InitialStateParms,
-    StateParms,
-    ObsParms,
     InitialDist,
     StateDist,
     ObsDist,
 > where
-    InitialStateParms: ParameterSet,
-    StateParms: ParameterSet,
-    ObsParms: ParameterSet,
-    InitialDist: Distribution<InitialStateParms>,
-    StateDist: Distribution<StateParms>,
-    ObsDist: Distribution<ObsParms>,
+    InitialDist: Distribution,
+    StateDist: Distribution,
+    ObsDist: Distribution,
 {
     size_state: usize,
     size_observation: usize,
@@ -93,8 +75,6 @@ pub struct LinearStateSpaceParameters<
     observation_matrix: DMatrix<f64>,
     state_dist: StateDist,
     observation_dist: ObsDist,
-
-    _marker: PhantomData<(InitialStateParms, StateParms, ObsParms)>,
 }
 
 /*
