@@ -1,70 +1,103 @@
 use nalgebra::{DMatrix, DVector};
 use rand::SeedableRng;
 use rand::rngs::StdRng;
+use std::marker::PhantomData;
 
 use crate::{
-    distributions::{Distribution, GaussianDistribution},
+    distributions::{CenteredGaussianDistribution, Distribution, GaussianDistribution},
+    linear_algebra::{LowerTriangularMatrix, SchurStableMatrix},
     parameter_set::ParameterSet,
-    linear_algebra::LowerTriangularMatrix,
 };
 
-
 pub trait StateSpaceModel<
-    ModelParms, StateParms, ObsParms, ForcParms, FiltParms, SmoothParms,
-    StateDist, ObsDist, ForcDist, FiltDist, SmoothDist,
-> where 
-    ModelParms:     ParameterSet,               
-    StateParms:     ParameterSet,
-    ObsParms:       ParameterSet,
-    ForcParms:      ParameterSet,
-    FiltParms:      ParameterSet,
-    SmoothParms:    ParameterSet,
-    StateDist:      Distribution<StateParms>,
-    ObsDist:        Distribution<ObsParms>,
-    ForcDist:       Distribution<ForcParms>,
-    FiltDist:       Distribution<FiltParms>,
-    SmoothDist:     Distribution<SmoothParms>,
+    ModelParms,
+    InitialStateParms,
+    StateParms,
+    ObsParms,
+    ForcParms,
+    FiltParms,
+    SmoothParms,
+    InitialStateDist,
+    StateDist,
+    ObsDist,
+    ForcDist,
+    FiltDist,
+    SmoothDist,
+> where
+    ModelParms: ParameterSet,
+    InitialStateParms: ParameterSet,
+    StateParms: ParameterSet,
+    ObsParms: ParameterSet,
+    ForcParms: ParameterSet,
+    FiltParms: ParameterSet,
+    SmoothParms: ParameterSet,
+    InitialStateDist: Distribution<InitialStateParms>,
+    StateDist: Distribution<StateParms>,
+    ObsDist: Distribution<ObsParms>,
+    ForcDist: Distribution<ForcParms>,
+    FiltDist: Distribution<FiltParms>,
+    SmoothDist: Distribution<SmoothParms>,
 {
     fn get_parameters_as_vector(&self) -> DVector<f64>;
     fn set_parameters_as_vector(&mut self, params: &DVector<f64>);
     fn get_num_parameters(&self) -> usize;
 
-    fn forecast(&self, observations: &Vec<DMatrix<f64>>, forecast_steps: &usize) -> Vec<ForcDist>;
-    fn filter_state(&self, observations: &Vec<DMatrix<f64>>) -> Vec<FiltDist>;
-    fn smooth_state(&self, observations: &Vec<DMatrix<f64>>) -> Vec<SmoothDist>;
+    fn forecast(
+        &self,
+        observations: &Vec<DMatrix<f64>>,
+        forecast_steps: &usize,
+        observed_control_variables: Option<&Vec<DMatrix<f64>>>,
+        forecast_control_variables: Option<&Vec<DMatrix<f64>>>,
+    ) -> Vec<ForcDist>;
+    fn filter_state(
+        &self,
+        observations: &Vec<DMatrix<f64>>,
+        observed_control_variables: Option<&Vec<DMatrix<f64>>>,
+    ) -> Vec<FiltDist>;
+    fn smooth_state(
+        &self,
+        observations: &Vec<DMatrix<f64>>,
+        observed_control_variables: Option<&Vec<DMatrix<f64>>>,
+    ) -> Vec<SmoothDist>;
     fn sample(
         &self,
         num_observations: &usize,
         initial_state: Option<StateDist>,
+        observed_control_variables: Option<&Vec<DMatrix<f64>>>,
         seed: Option<u64>,
     ) -> (Vec<DVector<f64>>, Vec<DVector<f64>>);
 }
 
 pub struct LinearStateSpaceParameters<
-    ModelParms, StateParms, ObsParms, ForcParms, FiltParms, SmoothParms,
-    StateDist, ObsDist, ForcDist, FiltDist, SmoothDist,
-> where 
-    StateParms:     ParameterSet,
-    ObsParms:       ParameterSet,
-    ForcParms:      ParameterSet,
-    FiltParms:      ParameterSet,
-    SmoothParms:    ParameterSet,
-    StateDist:      Distribution<StateParms>,
-    ForcDist:       Distribution<ForcParms>,
+    InitialStateParms,
+    StateParms,
+    ObsParms,
+    InitialDist,
+    StateDist,
+    ObsDist,
+> where
+    InitialStateParms: ParameterSet,
+    StateParms: ParameterSet,
+    ObsParms: ParameterSet,
+    InitialDist: Distribution<InitialStateParms>,
+    StateDist: Distribution<StateParms>,
+    ObsDist: Distribution<ObsParms>,
 {
     size_state: usize,
     size_observation: usize,
     num_parameters: usize,
 
-    pub initial_mean: DVector<f64>,
-    pub initial_cov_dec: LowerTriangularMatrix,
+    initial_state: InitialDist,
 
-    pub transition_matrix: DMatrix<f64>,
-    pub observation_matrix: DMatrix<f64>,
-    pub process_noise_cov_dec: LowerTriangularMatrix,
-    pub observation_noise_cov_dec: LowerTriangularMatrix,
+    transition_matrix: SchurStableMatrix,
+    observation_matrix: DMatrix<f64>,
+    state_dist: StateDist,
+    observation_dist: ObsDist,
+
+    _marker: PhantomData<(InitialStateParms, StateParms, ObsParms)>,
 }
 
+/*
 impl LinearGaussianStateSpaceParameters {
     pub fn new(size_state: usize, size_observation: usize) -> Self {
         let num_parameters = size_state  // initial_mean
@@ -779,4 +812,4 @@ mod tests {
     }
 }
 
-
+*/

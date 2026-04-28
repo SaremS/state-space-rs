@@ -151,13 +151,11 @@ mod tests {
 
     #[test]
     fn test_schur_stable_matrix() {
+        // Check that the eigenvalues of the resulting matrix are inside the unit circle
+        // variation 0 - default parameters
         let dim = 2;
         let mut ssm = SchurStableMatrix::new(dim);
         let dense = ssm.to_dense();
-        // Check that the eigenvalues of the resulting matrix are inside the unit circle
-        println!("Dense matrix:\n{:?}", dense);
-        let eigvals = dense.complex_eigenvalues();
-        println!("Eigenvalues: {:?}", eigvals);
         let eigvals = dense.complex_eigenvalues();
         for eig in eigvals.iter() {
             assert!(eig.norm() <= 1.0);
@@ -170,7 +168,6 @@ mod tests {
         let dense = ssm.to_dense();
         let eigvals = dense.complex_eigenvalues();
         for eig in eigvals.iter() {
-            println!("Eigenvalue: {:?}", eig);
             assert!(eig.norm() <= 1.0);
         }
 
@@ -181,7 +178,6 @@ mod tests {
         let dense = ssm.to_dense();
         let eigvals = dense.complex_eigenvalues();
         for eig in eigvals.iter() {
-            println!("Eigenvalue: {:?}", eig);
             assert!(eig.norm() <= 1.0);
         }
     }
