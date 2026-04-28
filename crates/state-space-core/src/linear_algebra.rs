@@ -157,7 +157,10 @@ mod tests {
         let mut ssm = SchurStableMatrix::new(dim);
         let dense = ssm.to_dense();
         // Check that the eigenvalues of the resulting matrix are inside the unit circle
-        let eigvals = dense.clone().eigenvalues();
+        println!("Dense matrix:\n{:?}", dense);
+        let eigvals = dense.complex_eigenvalues();
+        println!("Eigenvalues: {:?}", eigvals);
+        let eigvals = dense.complex_eigenvalues();
         for eig in eigvals.iter() {
             assert!(eig.norm() <= 1.0);
         }
@@ -165,7 +168,7 @@ mod tests {
         // variation 1 - A all zeros
         ssm.set_parameters_from_vector(&DVector::from_vec(vec![0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0])); 
         let dense = ssm.to_dense();
-        let eigvals = dense.clone().eigenvalues();
+        let eigvals= dense.complex_eigenvalues();
         for eig in eigvals.iter() {
             println!("Eigenvalue: {:?}", eig);
             assert!(eig.norm() <= 1.0);
@@ -174,7 +177,7 @@ mod tests {
         // variation 2 - B all zeros
         ssm.set_parameters_from_vector(&DVector::from_vec(vec![0.5, 0.0, 0.0, 0.5, 0.0, 0.0, 0.0, 0.0])); 
         let dense = ssm.to_dense();
-        let eigvals = dense.clone().eigenvalues();
+        let eigvals = dense.complex_eigenvalues();
         for eig in eigvals.iter() {
             println!("Eigenvalue: {:?}", eig);
             assert!(eig.norm() <= 1.0);
