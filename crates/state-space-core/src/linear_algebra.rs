@@ -80,7 +80,6 @@ impl LowerTriangularMatrix {
     }
 }
 
-
 #[derive(Clone)]
 #[allow(non_snake_case)]
 pub struct SchurStableMatrix {
@@ -91,7 +90,7 @@ pub struct SchurStableMatrix {
 
 impl SchurStableMatrix {
     /* Transforms two square matrices into a Schur stable matrix using the Cayley transform. The resulting matrix is guaranteed to be Schur stable by construction, as the Cayley transform maps the left half-plane to the unit disk. The parameters are the entries of A and B, which can be optimized freely without constraints.
-    */
+     */
 
     #[allow(non_snake_case)]
     pub fn new(dim: usize) -> Self {
@@ -109,8 +108,8 @@ impl SchurStableMatrix {
 
         let A_C = &S - &P;
         let I = DMatrix::identity(self.dim, self.dim);
-        
-        (&I+&A_C) * (&I-&A_C).try_inverse().unwrap() //always invertible by construction
+
+        (&I + &A_C) * (&I - &A_C).try_inverse().unwrap() //always invertible by construction
     }
 
     pub fn get_num_parameters(&self) -> usize {
@@ -130,7 +129,6 @@ impl SchurStableMatrix {
         self.B = DMatrix::from_row_slice(self.dim, self.dim, (&params.rows(size, size)).into());
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -166,16 +164,20 @@ mod tests {
         }
 
         // variation 1 - A all zeros
-        ssm.set_parameters_from_vector(&DVector::from_vec(vec![0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0])); 
+        ssm.set_parameters_from_vector(&DVector::from_vec(vec![
+            0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0,
+        ]));
         let dense = ssm.to_dense();
-        let eigvals= dense.complex_eigenvalues();
+        let eigvals = dense.complex_eigenvalues();
         for eig in eigvals.iter() {
             println!("Eigenvalue: {:?}", eig);
             assert!(eig.norm() <= 1.0);
         }
 
         // variation 2 - B all zeros
-        ssm.set_parameters_from_vector(&DVector::from_vec(vec![0.5, 0.0, 0.0, 0.5, 0.0, 0.0, 0.0, 0.0])); 
+        ssm.set_parameters_from_vector(&DVector::from_vec(vec![
+            0.5, 0.0, 0.0, 0.5, 0.0, 0.0, 0.0, 0.0,
+        ]));
         let dense = ssm.to_dense();
         let eigvals = dense.complex_eigenvalues();
         for eig in eigvals.iter() {
@@ -184,5 +186,3 @@ mod tests {
         }
     }
 }
-
-
