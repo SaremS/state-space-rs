@@ -79,3 +79,107 @@ impl LowerTriangularMatrix {
         self.lower_elements = params.rows(size, size * (size - 1) / 2).into_owned();
     }
 }
+
+
+#[derive(Clone)]
+#[allow(non_snake_case)]
+pub struct SchurStableMatrix {
+    dim: usize,
+    A: DMatrix<f64>,
+    B: DMatrix<f64>,
+}
+
+impl SchurStableMatrix {
+    /* Transforms two square matrices into a Schur stable matrix using the Cayley transform. The resulting matrix is guaranteed to be Schur stable by construction, as the Cayley transform maps the left half-plane to the unit disk. The parameters are the entries of A and B, which can be optimized freely without constraints.
+    */
+
+    #[allow(non_snake_case)]
+    pub fn new(dim: usize) -> Self {
+        Self {
+            dim,
+            A: LowerTriangularMatrix::new_with_values(dim, 0.5, 0.5).to_dense(),
+            B: DMatrix::identity(dim, dim),
+        }
+    }
+
+    #[allow(non_snake_case)]
+    pub fn to_dense(&self) -> DMatrix<f64> {
+        let S = &self.A - &self.A.transpose();
+        let P = &self.B * &self.B.transpose();
+
+        let A_C = &S - &P;
+        let I = DMatrix::identity(self.dim, self.dim);
+        
+        (&I+&A_C) * (&I-&A_C).try_inverse().unwrap() //always invertible by construction
+    }
+
+    pub fn get_num_parameters(&self) -> usize {
+        2 * self.dim * self.dim
+    }
+
+    pub fn get_parameters_as_vector(&self) -> DVector<f64> {
+        DVector::from_iterator(
+            self.get_num_parameters(),
+            self.A.iter().cloned().chain(self.B.iter().cloned()),
+        )
+    }
+
+    pub fn set_parameters_from_vector(&mut self, params: &DVector<f64>) {
+        let size = self.dim * self.dim;
+        self.A = DMatrix::from_row_slice(self.dim, self.dim, (&params.rows(0, size)).into());
+        self.B = DMatrix::from_row_slice(self.dim, self.dim, (&params.rows(size, size)).into());
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_lower_triangular_matrix() {
+        let size = 3;
+        let mut ltm = LowerTriangularMatrix::new(size);
+        ltm.set_diagonal(DVector::from_vec(vec![1.0, 2.0, 3.0]));
+        ltm.set_lower_elements(DVector::from_vec(vec![0.5, 0.5, 0.5]));
+        let dense = ltm.to_dense();
+        assert_eq!(dense[(0, 0)], 1.0);
+        assert_eq!(dense[(1, 1)], 2.0);
+        assert_eq!(dense[(2, 2)], 3.0);
+        assert_eq!(dense[(1, 0)], 0.5);
+        assert_eq!(dense[(2, 0)], 0.5);
+        assert_eq!(dense[(2, 1)], 0.5);
+    }
+
+    #[test]
+    fn test_schur_stable_matrix() {
+        let dim = 2;
+        let mut ssm = SchurStableMatrix::new(dim);
+        let dense = ssm.to_dense();
+        // Check that the eigenvalues of the resulting matrix are inside the unit circle
+        let eigvals = dense.clone().eigenvalues();
+        for eig in eigvals.iter() {
+            assert!(eig.norm() <= 1.0);
+        }
+
+        // variation 1 - A all zeros
+        ssm.set_parameters_from_vector(&DVector::from_vec(vec![0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0])); 
+        let dense = ssm.to_dense();
+        let eigvals = dense.clone().eigenvalues();
+        for eig in eigvals.iter() {
+            println!("Eigenvalue: {:?}", eig);
+            assert!(eig.norm() <= 1.0);
+        }
+
+        // variation 2 - B all zeros
+        ssm.set_parameters_from_vector(&DVector::from_vec(vec![0.5, 0.0, 0.0, 0.5, 0.0, 0.0, 0.0, 0.0])); 
+        let dense = ssm.to_dense();
+        let eigvals = dense.clone().eigenvalues();
+        for eig in eigvals.iter() {
+            println!("Eigenvalue: {:?}", eig);
+            assert!(eig.norm() <= 1.0);
+        }
+    }
+}
+
+

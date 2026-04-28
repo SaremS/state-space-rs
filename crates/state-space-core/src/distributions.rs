@@ -260,7 +260,7 @@ mod tests {
     }
 
     #[test]
-    fn test_Centeredgaussian_log_prob() {
+    fn test_centered_gaussian_log_prob() {
         let parameter_set = CenteredGaussianParameterSet {
             cov: LowerTriangularMatrix::new_with_values(2, 1.0, 0.0),
         };
