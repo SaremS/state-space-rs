@@ -24,6 +24,43 @@ impl LowerTriangularMatrix {
         }
     }
 
+    pub fn new_from_posdef_dense(mat: DMatrix<f64>) -> anyhow::Result<Self> {
+        if mat.nrows() != mat.ncols() {
+            return Err(anyhow::anyhow!(
+                "Input matrix must be square: got {} rows and {} columns",
+                mat.nrows(),
+                mat.ncols()
+            ));
+        }
+
+        let size = mat.nrows();
+        let cholesky = mat.cholesky();
+        if cholesky.is_none() {
+            return Err(anyhow::anyhow!(
+                "Input matrix must be positive definite for Cholesky decomposition"
+            ));
+        }
+
+        let lower = cholesky.unwrap().l();
+        let mut diagonal = DVector::zeros(size);
+        let mut lower_elements = DVector::zeros(size * (size - 1) / 2);
+        let mut idx = 0;
+
+        for i in 0..size {
+            diagonal[i] = lower[(i, i)];
+            for j in 0..i {
+                lower_elements[idx] = lower[(i, j)];
+                idx += 1;
+            }
+        }
+
+        Ok(Self {
+            size,
+            diagonal,
+            lower_elements,
+        })
+    }
+
     pub fn to_dense(&self) -> DMatrix<f64> {
         let mut mat = DMatrix::zeros(self.size, self.size);
         let mut idx = 0;

@@ -2,7 +2,7 @@ use nalgebra::{DMatrix, DVector};
 use std::marker::PhantomData;
 
 use crate::{
-    distributions::{Distribution, GaussianDistribution},
+    distributions::{Distribution, GaussianDistribution, CenteredGaussianDistribution},
     linear_algebra::SchurStableMatrix,
     parameter_set::ParameterSet,
 };
@@ -66,9 +66,9 @@ where
 
 impl<S, T, U> LinearStateSpaceParameters<S, T, U>
 where
-    S: Distribution,
-    T: Distribution,
-    U: Distribution,
+    S: Distribution + Clone,
+    T: Distribution + Clone,
+    U: Distribution + Clone,
 {
     pub fn new_from_dist(
         initial_state_dist: S,
@@ -102,6 +102,26 @@ where
             state_dist,
             observation_dist,
         })
+    }
+
+    pub fn get_transition_matrix(&self) -> DMatrix<f64> {
+        self.transition_matrix.to_dense()
+    }
+
+    pub fn get_observation_matrix(&self) -> DMatrix<f64> {
+        self.observation_matrix.clone()
+    }
+
+    pub fn get_initial_state_dist(&self) -> S {
+        self.initial_state_dist.clone()
+    }
+
+    pub fn get_state_dist(&self) -> T {
+        self.state_dist.clone()
+    }
+
+    pub fn get_observation_dist(&self) -> U {
+        self.observation_dist.clone()
     }
 }
 
@@ -178,8 +198,8 @@ impl<S: Distribution, T: Distribution, U: Distribution> ParameterSet
 pub struct LinearGaussianStateSpaceModel {
     parameters: LinearStateSpaceParameters<
         GaussianDistribution,
-        GaussianDistribution,
-        GaussianDistribution,
+        CenteredGaussianDistribution,
+        CenteredGaussianDistribution,
     >,
 
     filter_dist: PhantomData<GaussianDistribution>,
@@ -190,8 +210,8 @@ pub struct LinearGaussianStateSpaceModel {
 impl LinearGaussianStateSpaceModel {
     pub fn new(size_state: usize, size_observation: usize) -> Self {
         let initial_dist = GaussianDistribution::new_with_dim(size_state);
-        let state_dist = GaussianDistribution::new_with_dim(size_state);
-        let obs_dist = GaussianDistribution::new_with_dim(size_observation);
+        let state_dist = CenteredGaussianDistribution::new_with_dim(size_state);
+        let obs_dist = CenteredGaussianDistribution::new_with_dim(size_observation);
 
         let filter_dist = PhantomData;
         let smoothing_dist = PhantomData;
@@ -236,7 +256,6 @@ impl LinearGaussianStateSpaceModel {
         Ok(log_likelihood)
     }*/
 
-    /*
     fn filter_state_internal(
         &self,
         observations: &Vec<DMatrix<f64>>,
@@ -245,13 +264,17 @@ impl LinearGaussianStateSpaceModel {
         //return predicted states AND filtered states
         let num_observations = observations.len();
 
-        let current_state_mean = self.parameters.get_initial_mean();
-        let current_state_cov = self.parameters.get_initial_cov();
+        let initial_dist = &(self.parameters.get_initial_state_dist());
+        let state_dist = &(self.parameters.get_state_dist());
+        let obs_dist = &(self.parameters.get_observation_dist());
+
+        let current_state_mean = initial_dist.get_mean();
+        let current_state_cov = initial_dist.get_cov();
 
         let transition_matrix = self.parameters.get_transition_matrix();
         let observation_matrix = self.parameters.get_observation_matrix();
-        let process_noise_cov = self.parameters.get_process_noise_cov();
-        let observation_noise_cov = self.parameters.get_observation_noise_cov();
+        let process_noise_cov = state_dist.get_cov();
+        let observation_noise_cov = obs_dist.get_cov();
 
         let mut predicted_states = vec![];
         let mut filtered_states = vec![];
@@ -261,10 +284,10 @@ impl LinearGaussianStateSpaceModel {
             let next_cov = &transition_matrix * &current_state_cov * &transition_matrix.transpose()
                 + &process_noise_cov;
 
-            let predicted_state = GaussianDistribution {
-                mean: next_mean.clone(),
-                cov: next_cov.clone(),
-            };
+            let predicted_state = GaussianDistribution::new_from_params(
+                next_mean.clone(),
+                next_cov.clone(),
+            ).unwrap();
             predicted_states.push(predicted_state);
 
             let predicted_observation_mean = &observation_matrix * &next_mean;
@@ -281,16 +304,16 @@ impl LinearGaussianStateSpaceModel {
 
             let updated_mean = &next_mean + &kalman_gain * &current_error;
             let updated_cov = &next_cov - &kalman_gain * &observation_matrix * &next_cov;
-            let filtered_current_state = GaussianDistribution {
-                mean: updated_mean,
-                cov: updated_cov,
-            };
+            let filtered_current_state = GaussianDistribution::new_from_params(
+                updated_mean,
+                updated_cov,
+            ).unwrap();
 
             filtered_states.push(filtered_current_state.clone());
         }
 
         return (predicted_states, filtered_states);
-    }*/
+    }
 }
 
 /*

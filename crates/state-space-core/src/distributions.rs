@@ -56,9 +56,10 @@ impl ParameterSet for GaussianParameterSet {
         let mean_len = self.mean.len();
         self.mean = params.rows(0, mean_len).into();
         let cov_flat = params.rows(mean_len, params.len() - mean_len).into_owned();
-        self.cov.set_parameters_from_vector(&cov_flat);
+        
+        let result = self.cov.set_parameters_from_vector(&cov_flat);
 
-        Ok(())
+        result
     }
 
     fn get_num_parameters(&self) -> usize {
@@ -78,6 +79,22 @@ impl GaussianDistribution {
             DVector::from_fn(self.parameter_set.mean.len(), |_, _| normal.sample(rng));
         let cov_lower = self.parameter_set.cov.to_dense();
         &self.parameter_set.mean + cov_lower * z
+    }
+
+    pub fn new_from_params(mean: DVector<f64>, cov: DMatrix<f64>) -> anyhow::Result<Self> {
+        let cov_chol = LowerTriangularMatrix::new_from_posdef_dense(cov.clone()).map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to create GaussianDistribution from mean and covariance: {}",
+                e
+            )
+        })?;      
+
+        let parameter_set = GaussianParameterSet {
+            mean,
+            cov: cov_chol,
+        };
+
+        Ok(Self { parameter_set })
     }
 
     pub fn get_mean(&self) -> DVector<f64> {
@@ -146,8 +163,9 @@ impl Distribution for GaussianDistribution {
             ));
         }
 
-        self.parameter_set.set_parameters(params);
-        Ok(())
+        let result = self.parameter_set.set_parameters(params);
+
+        result
     }
 
     fn get_parameters(&self) -> DVector<f64> {
@@ -181,9 +199,9 @@ impl ParameterSet for CenteredGaussianParameterSet {
             ));
         }
 
-        self.cov.set_parameters_from_vector(params);
-
-        Ok(())
+        let result = self.cov.set_parameters_from_vector(params);
+        
+        result
     }
 
     fn get_num_parameters(&self) -> usize {
@@ -269,8 +287,8 @@ impl Distribution for CenteredGaussianDistribution {
             ));
         }
 
-        self.parameter_set.set_parameters(params);
-        Ok(())
+        let result = self.parameter_set.set_parameters(params);
+        result
     }
 
     fn get_parameters(&self) -> DVector<f64> {
