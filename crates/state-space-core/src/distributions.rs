@@ -18,6 +18,7 @@ pub trait Distribution: Send + Sync {
     fn new_with_dim(dim: usize) -> Self
     where
         Self: Sized;
+    fn get_dim(&self) -> usize;
     fn log_prob(&self, x: &DVector<f64>) -> anyhow::Result<f64>;
     fn sample(&self) -> DVector<f64>;
     fn sample_with_rng(&self, rng: &mut dyn Rng) -> DVector<f64>;
@@ -103,6 +104,10 @@ impl Distribution for GaussianDistribution {
         };
 
         Self { parameter_set }
+    }
+
+    fn get_dim(&self) -> usize {
+        self.parameter_set.mean.len()
     }
 
     fn log_prob(&self, x: &DVector<f64>) -> anyhow::Result<f64> {
@@ -214,6 +219,10 @@ impl Distribution for CenteredGaussianDistribution {
         };
 
         Self { parameter_set }
+    }
+
+    fn get_dim(&self) -> usize {
+        self.parameter_set.cov.get_size()
     }
 
     fn log_prob(&self, x: &DVector<f64>) -> anyhow::Result<f64> {

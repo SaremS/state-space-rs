@@ -9,23 +9,15 @@ use crate::{
     parameter_set::ParameterSet,
 };
 
-pub trait StateSpaceModel<
-    ModelParms,
-    InitialStateDist,
-    StateDist,
-    ObsDist,
-    ForcDist,
-    FiltDist,
-    SmoothDist,
-> where
-    ModelParms: ParameterSet,
-    InitialStateDist: Distribution,
-    StateDist: Distribution,
-    ObsDist: Distribution,
-    ForcDist: Distribution,
-    FiltDist: Distribution,
-    SmoothDist: Distribution,
-{
+pub trait StateSpaceModel {
+    type Parameters: ParameterSet;
+    type InitialStateDist: Distribution;
+    type StateDist: Distribution;
+    type ObsDist: Distribution;
+    type ForcDist: Distribution;
+    type FiltDist: Distribution;
+    type SmoothDist: Distribution;
+
     fn get_parameters_as_vector(&self) -> DVector<f64>;
     fn set_parameters_as_vector(&mut self, params: &DVector<f64>);
     fn get_num_parameters(&self) -> usize;
@@ -36,37 +28,37 @@ pub trait StateSpaceModel<
         forecast_steps: &usize,
         observed_control_variables: Option<&Vec<DMatrix<f64>>>,
         forecast_control_variables: Option<&Vec<DMatrix<f64>>>,
-    ) -> Vec<ForcDist>;
+    ) -> Vec<Self::ForcDist>;
     fn filter_state(
         &self,
         observations: &Vec<DMatrix<f64>>,
         observed_control_variables: Option<&Vec<DMatrix<f64>>>,
-    ) -> Vec<FiltDist>;
+    ) -> Vec<Self::FiltDist>;
     fn smooth_state(
         &self,
         observations: &Vec<DMatrix<f64>>,
         observed_control_variables: Option<&Vec<DMatrix<f64>>>,
-    ) -> Vec<SmoothDist>;
+    ) -> Vec<Self::SmoothDist>;
     fn sample(
         &self,
         num_observations: &usize,
-        initial_state: Option<StateDist>,
+        initial_state: Option<Self::StateDist>,
         observed_control_variables: Option<&Vec<DMatrix<f64>>>,
         seed: Option<u64>,
     ) -> (Vec<DVector<f64>>, Vec<DVector<f64>>);
 }
 
-pub struct LinearStateSpaceParameters<InitialDist, StateDist, ObsDist>
+struct LinearStateSpaceParameters<InitialDist, StateDist, ObsDist>
 where
     InitialDist: Distribution,
     StateDist: Distribution,
     ObsDist: Distribution,
 {
-    size_state: usize,
-    size_observation: usize,
+    dim_state: usize,
+    dim_observation: usize,
     num_parameters: usize,
 
-    initial_state: InitialDist,
+    initial_state_dist: InitialDist,
 
     transition_matrix: SchurStableMatrix,
     observation_matrix: DMatrix<f64>,
@@ -74,162 +66,110 @@ where
     observation_dist: ObsDist,
 }
 
-/*
-impl LinearGaussianStateSpaceParameters {
-    pub fn new(size_state: usize, size_observation: usize) -> Self {
-        let num_parameters = size_state  // initial_mean
-            + size_state * (size_state + 1) / 2  // initial_cov_dec
-            + size_state * size_state  // transition_matrix
-            + size_observation * size_state  // observation_matrix
-            + size_state * (size_state + 1) / 2  // process_noise_cov_dec
-            + size_observation * (size_observation + 1) / 2; // observation_noise_cov_dec
-        Self {
-            size_state,
-            size_observation,
-            num_parameters,
-
-            initial_mean: DVector::zeros(size_state),
-            initial_cov_dec: LowerTriangularMatrix::new(size_state),
-
-            transition_matrix: DMatrix::identity(size_state, size_state),
-            observation_matrix: DMatrix::identity(size_observation, size_state),
-            process_noise_cov_dec: LowerTriangularMatrix::new(size_state),
-            observation_noise_cov_dec: LowerTriangularMatrix::new(size_observation),
+impl<S, T, U> LinearStateSpaceParameters<S, T, U>
+where
+    S: Distribution,
+    T: Distribution,
+    U: Distribution,
+{
+    pub fn new_from_dist(
+        initial_state_dist: S,
+        state_dist: T,
+        observation_dist: U,
+    ) -> anyhow::Result<Self> {
+        let dim_state = initial_state_dist.get_dim();
+        if state_dist.get_dim() != dim_state {
+            return Err(anyhow::anyhow!(
+                "State distribution dimension does not match initial state distribution dimension"
+            ));
         }
-    }
 
-    pub fn get_initial_mean(&self) -> DVector<f64> {
-        return self.initial_mean.clone();
-    }
+        let dim_observation = observation_dist.get_dim();
 
-    pub fn set_initial_mean(&mut self, initial_mean: DVector<f64>) {
-        self.initial_mean = initial_mean;
-    }
+        let transition_matrix = SchurStableMatrix::new(dim_state);
+        let observation_matrix = DMatrix::identity(dim_observation, dim_state);
 
-    pub fn get_initial_cov(&self) -> DMatrix<f64> {
-        &self.initial_cov_dec.to_dense() * self.initial_cov_dec.to_dense().transpose()
-    }
-
-    pub fn set_initial_cov_dec(&mut self, non_zero_elements: &DVector<f64>) {
-        self.initial_cov_dec
-            .set_parameters_from_vector(non_zero_elements);
-    }
-
-    pub fn get_transition_matrix(&self) -> DMatrix<f64> {
-        return self.transition_matrix.clone();
-    }
-
-    pub fn set_transition_matrix(&mut self, transition_matrix: DMatrix<f64>) {
-        self.transition_matrix = transition_matrix;
-    }
-
-    pub fn get_observation_matrix(&self) -> DMatrix<f64> {
-        return self.observation_matrix.clone();
-    }
-
-    pub fn set_observation_matrix(&mut self, observation_matrix: DMatrix<f64>) {
-        self.observation_matrix = observation_matrix;
-    }
-
-    pub fn get_process_noise_cov(&self) -> DMatrix<f64> {
-        &self.process_noise_cov_dec.to_dense() * self.process_noise_cov_dec.to_dense().transpose()
-    }
-
-    pub fn set_process_noise_cov_dec(&mut self, elements: &DVector<f64>) {
-        self.process_noise_cov_dec
-            .set_parameters_from_vector(elements);
-    }
-
-    pub fn get_observation_noise_cov(&self) -> DMatrix<f64> {
-        &self.observation_noise_cov_dec.to_dense()
-            * self.observation_noise_cov_dec.to_dense().transpose()
-    }
-
-    pub fn set_observation_noise_cov_dec(&mut self, elements: &DVector<f64>) {
-        self.observation_noise_cov_dec
-            .set_parameters_from_vector(elements);
+        let num_parameters = initial_state_dist.get_num_parameters()
+            + transition_matrix.get_num_parameters()
+            + observation_matrix.nrows() * observation_matrix.ncols()
+            + state_dist.get_num_parameters()
+            + observation_dist.get_num_parameters();
+        Ok(Self {
+            dim_state,
+            dim_observation,
+            num_parameters,
+            initial_state_dist,
+            transition_matrix,
+            observation_matrix,
+            state_dist,
+            observation_dist,
+        })
     }
 }
 
-impl ParameterSet for LinearGaussianStateSpaceParameters {
+impl<S: Distribution, T: Distribution, U: Distribution> ParameterSet
+    for LinearStateSpaceParameters<S, T, U>
+{
     fn get_parameters(&self) -> DVector<f64> {
-        let initial_cov_dec_vector = self.initial_cov_dec.get_parameters_as_vector();
-        let transition_matrix_vector = DVector::from_iterator(
-            self.size_state * self.size_state,
-            self.transition_matrix.iter().cloned(),
-        );
-        let observation_matrix_vector = DVector::from_iterator(
-            self.size_observation * self.size_state,
-            self.observation_matrix.iter().cloned(),
-        );
-        let process_noise_cov_dec_vector = self.process_noise_cov_dec.get_parameters_as_vector();
-        let observation_noise_cov_dec_vector =
-            self.observation_noise_cov_dec.get_parameters_as_vector();
+        let mut params = Vec::with_capacity(self.num_parameters);
 
-        return DVector::from_iterator(
-            self.initial_mean.len()
-                + initial_cov_dec_vector.len()
-                + transition_matrix_vector.len()
-                + observation_matrix_vector.len()
-                + process_noise_cov_dec_vector.len()
-                + observation_noise_cov_dec_vector.len(),
-            self.initial_mean
+        params.extend(self.initial_state_dist.get_parameters().iter().cloned());
+        params.extend(
+            self.transition_matrix
+                .get_parameters_as_vector()
                 .iter()
-                .cloned()
-                .chain(initial_cov_dec_vector.iter().cloned())
-                .chain(transition_matrix_vector.iter().cloned())
-                .chain(observation_matrix_vector.iter().cloned())
-                .chain(process_noise_cov_dec_vector.iter().cloned())
-                .chain(observation_noise_cov_dec_vector.iter().cloned()),
+                .cloned(),
         );
+        params.extend(self.observation_matrix.iter().cloned());
+        params.extend(self.state_dist.get_parameters().iter().cloned());
+        params.extend(self.observation_dist.get_parameters().iter().cloned());
+
+        return DVector::from_vec(params);
     }
 
-    fn set_parameters(&mut self, params: &DVector<f64>) {
+    fn set_parameters(&mut self, params: &DVector<f64>) -> anyhow::Result<()> {
+        if params.len() != self.num_parameters {
+            return Err(anyhow::anyhow!(
+                "Parameter vector length does not match expected number of parameters"
+            ));
+        }
+
         let mut idx = 0;
 
-        self.initial_mean = params.rows(idx, self.size_state).into_owned();
-        idx += self.size_state;
+        let initial_state_params_len = self.initial_state_dist.get_num_parameters();
+        self.initial_state_dist
+            .set_parameters(&params.rows(idx, initial_state_params_len).into())?;
+        idx += initial_state_params_len;
 
-        let num_initial_cov_dec_params = self.initial_cov_dec.get_num_parameters();
-        self.initial_cov_dec
-            .set_parameters_from_vector(&params.rows(idx, num_initial_cov_dec_params).into_owned());
-        idx += num_initial_cov_dec_params;
-
-        self.transition_matrix = DMatrix::from_iterator(
-            self.size_state,
-            self.size_state,
-            params
-                .rows(idx, self.size_state * self.size_state)
-                .iter()
-                .cloned(),
-        );
-        idx += self.size_state * self.size_state;
-
-        self.observation_matrix = DMatrix::from_iterator(
-            self.size_observation,
-            self.size_state,
-            params
-                .rows(idx, self.size_observation * self.size_state)
-                .iter()
-                .cloned(),
-        );
-        idx += self.size_observation * self.size_state;
-
-        let num_process_noise_cov_dec_params = self.process_noise_cov_dec.get_num_parameters();
-        self.process_noise_cov_dec.set_parameters_from_vector(
+        self.transition_matrix.set_parameters_from_vector(
             &params
-                .rows(idx, num_process_noise_cov_dec_params)
-                .into_owned(),
-        );
-        idx += num_process_noise_cov_dec_params;
+                .rows(idx, self.transition_matrix.get_num_parameters())
+                .into(),
+        )?;
+        idx += self.transition_matrix.get_num_parameters();
 
-        let num_observation_noise_cov_dec_params =
-            self.observation_noise_cov_dec.get_num_parameters();
-        self.observation_noise_cov_dec.set_parameters_from_vector(
+        let obs_matrix_len = self.observation_matrix.nrows() * self.observation_matrix.ncols();
+        self.observation_matrix.copy_from(&DMatrix::from_row_slice(
+            self.observation_matrix.nrows(),
+            self.observation_matrix.ncols(),
+            params.rows(idx, obs_matrix_len).as_slice(),
+        ));
+        idx += obs_matrix_len;
+
+        self.state_dist.set_parameters(
             &params
-                .rows(idx, num_observation_noise_cov_dec_params)
-                .into_owned(),
-        );
+                .rows(idx, self.state_dist.get_num_parameters())
+                .into(),
+        )?;
+        idx += self.state_dist.get_num_parameters();
+
+        self.observation_dist.set_parameters(
+            &params
+                .rows(idx, self.observation_dist.get_num_parameters())
+                .into(),
+        )?;
+
+        Ok(())
     }
 
     fn get_num_parameters(&self) -> usize {
@@ -238,35 +178,41 @@ impl ParameterSet for LinearGaussianStateSpaceParameters {
 }
 
 pub struct LinearGaussianStateSpaceModel {
-    pub parameters: LinearGaussianStateSpaceParameters,
+    parameters: LinearStateSpaceParameters<
+        GaussianDistribution,
+        GaussianDistribution,
+        GaussianDistribution,
+    >,
+
+    filter_dist: PhantomData<GaussianDistribution>,
+    smoothing_dist: PhantomData<GaussianDistribution>,
+    forecast_dist: PhantomData<GaussianDistribution>,
 }
 
 impl LinearGaussianStateSpaceModel {
     pub fn new(size_state: usize, size_observation: usize) -> Self {
+        let initial_dist = GaussianDistribution::new_with_dim(size_state);
+        let state_dist = GaussianDistribution::new_with_dim(size_state);
+        let obs_dist = GaussianDistribution::new_with_dim(size_observation);
+
+        let filter_dist = PhantomData;
+        let smoothing_dist = PhantomData;
+        let forecast_dist = PhantomData;
+
         Self {
-            parameters: LinearGaussianStateSpaceParameters::new(size_state, size_observation),
+            parameters: LinearStateSpaceParameters::new_from_dist(
+                initial_dist,
+                state_dist,
+                obs_dist,
+            )
+            .unwrap(),
+            filter_dist,
+            smoothing_dist,
+            forecast_dist,
         }
     }
 
-    pub fn calculate_num_parameters(size_state: usize, size_observation: usize) -> usize {
-        return size_state  // initial_mean
-            + size_state * (size_state + 1) / 2  // initial_cov_dec
-            + size_state * size_state  // transition_matrix
-            + size_observation * size_state  // observation_matrix
-            + size_state * (size_state + 1) / 2  // process_noise_cov_dec
-            + size_observation * (size_observation + 1) / 2; // observation_noise_cov_dec
-    }
-
-    pub fn new_from_parameter_vector(
-        params: &DVector<f64>,
-        size_state: usize,
-        size_observation: usize,
-    ) -> Self {
-        let mut model = Self::new(size_state, size_observation);
-        model.parameters.set_parameters(params);
-        return model;
-    }
-
+    /*
     pub fn log_likelihood(&self, observations: &Vec<DMatrix<f64>>) -> anyhow::Result<f64> {
         let filtered_states = self.filter_state(observations);
         let observation_matrix = self.parameters.get_observation_matrix();
@@ -291,6 +237,8 @@ impl LinearGaussianStateSpaceModel {
 
         Ok(log_likelihood)
     }
+
+
 
     fn filter_state_internal(
         &self,
@@ -345,9 +293,10 @@ impl LinearGaussianStateSpaceModel {
         }
 
         return (predicted_states, filtered_states);
-    }
+    }*/
 }
 
+/*
 impl StateSpaceModel<GaussianDistribution, GaussianDistribution> for LinearGaussianStateSpaceModel {
     fn get_parameters_as_vector(&self) -> DVector<f64> {
         self.parameters.get_parameters()
