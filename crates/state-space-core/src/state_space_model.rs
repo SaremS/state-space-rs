@@ -1,11 +1,9 @@
 use nalgebra::{DMatrix, DVector};
-use rand::SeedableRng;
-use rand::rngs::StdRng;
 use std::marker::PhantomData;
 
 use crate::{
-    distributions::{CenteredGaussianDistribution, Distribution, GaussianDistribution},
-    linear_algebra::{LowerTriangularMatrix, SchurStableMatrix},
+    distributions::{Distribution, GaussianDistribution},
+    linear_algebra::SchurStableMatrix,
     parameter_set::ParameterSet,
 };
 
