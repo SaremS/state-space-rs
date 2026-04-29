@@ -2,7 +2,7 @@ use nalgebra::{DMatrix, DVector};
 use std::marker::PhantomData;
 
 use crate::{
-    distributions::{Distribution, GaussianDistribution, CenteredGaussianDistribution},
+    distributions::{CenteredGaussianDistribution, Distribution, GaussianDistribution},
     linear_algebra::SchurStableMatrix,
     parameter_set::ParameterSet,
 };
@@ -259,7 +259,7 @@ impl LinearGaussianStateSpaceModel {
     fn filter_state_internal(
         &self,
         observations: &Vec<DMatrix<f64>>,
-        observed_control_variables: Option<&Vec<DMatrix<f64>>>
+        observed_control_variables: Option<&Vec<DMatrix<f64>>>,
     ) -> (Vec<GaussianDistribution>, Vec<GaussianDistribution>) {
         //return predicted states AND filtered states
         let num_observations = observations.len();
@@ -284,10 +284,8 @@ impl LinearGaussianStateSpaceModel {
             let next_cov = &transition_matrix * &current_state_cov * &transition_matrix.transpose()
                 + &process_noise_cov;
 
-            let predicted_state = GaussianDistribution::new_from_params(
-                next_mean.clone(),
-                next_cov.clone(),
-            ).unwrap();
+            let predicted_state =
+                GaussianDistribution::new_from_params(next_mean.clone(), next_cov.clone()).unwrap();
             predicted_states.push(predicted_state);
 
             let predicted_observation_mean = &observation_matrix * &next_mean;
@@ -304,10 +302,8 @@ impl LinearGaussianStateSpaceModel {
 
             let updated_mean = &next_mean + &kalman_gain * &current_error;
             let updated_cov = &next_cov - &kalman_gain * &observation_matrix * &next_cov;
-            let filtered_current_state = GaussianDistribution::new_from_params(
-                updated_mean,
-                updated_cov,
-            ).unwrap();
+            let filtered_current_state =
+                GaussianDistribution::new_from_params(updated_mean, updated_cov).unwrap();
 
             filtered_states.push(filtered_current_state.clone());
         }

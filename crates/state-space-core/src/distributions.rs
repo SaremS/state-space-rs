@@ -56,7 +56,7 @@ impl ParameterSet for GaussianParameterSet {
         let mean_len = self.mean.len();
         self.mean = params.rows(0, mean_len).into();
         let cov_flat = params.rows(mean_len, params.len() - mean_len).into_owned();
-        
+
         let result = self.cov.set_parameters_from_vector(&cov_flat);
 
         result
@@ -87,7 +87,7 @@ impl GaussianDistribution {
                 "Failed to create GaussianDistribution from mean and covariance: {}",
                 e
             )
-        })?;      
+        })?;
 
         let parameter_set = GaussianParameterSet {
             mean,
@@ -200,7 +200,7 @@ impl ParameterSet for CenteredGaussianParameterSet {
         }
 
         let result = self.cov.set_parameters_from_vector(params);
-        
+
         result
     }
 
