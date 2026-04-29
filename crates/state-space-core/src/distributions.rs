@@ -1,4 +1,4 @@
-use nalgebra::DVector;
+use nalgebra::{DMatrix, DVector};
 use rand::Rng;
 use rand::rng;
 use rand_distr::{Distribution as Dist, Normal};
@@ -78,6 +78,14 @@ impl GaussianDistribution {
             DVector::from_fn(self.parameter_set.mean.len(), |_, _| normal.sample(rng));
         let cov_lower = self.parameter_set.cov.to_dense();
         &self.parameter_set.mean + cov_lower * z
+    }
+
+    pub fn get_mean(&self) -> DVector<f64> {
+        self.parameter_set.mean.clone()
+    }
+
+    pub fn get_cov(&self) -> DMatrix<f64> {
+        self.parameter_set.cov.to_dense().clone()
     }
 }
 
@@ -195,6 +203,16 @@ impl CenteredGaussianDistribution {
         let z: DVector<f64> = DVector::from_fn(d, |_, _| normal.sample(rng));
         let cov_lower = self.parameter_set.cov.to_dense();
         cov_lower * z
+    }
+
+    pub fn get_mean(&self) -> DVector<f64> {
+        let dim = self.parameter_set.cov.get_size();
+
+        DVector::<f64>::zeros(dim)
+    }
+
+    pub fn get_cov(&self) -> DMatrix<f64> {
+        self.parameter_set.cov.to_dense().clone()
     }
 }
 

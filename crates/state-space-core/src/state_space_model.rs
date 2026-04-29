@@ -236,16 +236,15 @@ impl LinearGaussianStateSpaceModel {
         }
 
         Ok(log_likelihood)
-    }
+    }*/
 
-
-
+    /*
     fn filter_state_internal(
         &self,
         observations: &Vec<DMatrix<f64>>,
+        observed_control_variables: Option<&Vec<DMatrix<f64>>>
     ) -> (Vec<GaussianDistribution>, Vec<GaussianDistribution>) {
         //return predicted states AND filtered states
-
         let num_observations = observations.len();
 
         let current_state_mean = self.parameters.get_initial_mean();
