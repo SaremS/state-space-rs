@@ -15,6 +15,9 @@ pub trait Distribution: Send + Sync {
     fn new_from_parameter_set(parameter_set: Self::Parameters) -> Self
     where
         Self: Sized;
+    fn new_with_dim(dim: usize) -> Self
+    where
+        Self: Sized;
     fn log_prob(&self, x: &DVector<f64>) -> anyhow::Result<f64>;
     fn sample(&self) -> DVector<f64>;
     fn sample_with_rng(&self, rng: &mut dyn Rng) -> DVector<f64>;
@@ -42,11 +45,19 @@ impl ParameterSet for GaussianParameterSet {
         params
     }
 
-    fn set_parameters(&mut self, params: &DVector<f64>) {
+    fn set_parameters(&mut self, params: &DVector<f64>) -> anyhow::Result<()> {
+        if params.len() != self.get_num_parameters() {
+            return Err(anyhow::anyhow!(
+                "Parameter vector length does not match mean and covariance size"
+            ));
+        }
+
         let mean_len = self.mean.len();
         self.mean = params.rows(0, mean_len).into();
         let cov_flat = params.rows(mean_len, params.len() - mean_len).into_owned();
         self.cov.set_parameters_from_vector(&cov_flat);
+
+        Ok(())
     }
 
     fn get_num_parameters(&self) -> usize {
@@ -82,6 +93,15 @@ impl Distribution for GaussianDistribution {
     }
 
     fn new_from_parameter_set(parameter_set: GaussianParameterSet) -> Self {
+        Self { parameter_set }
+    }
+
+    fn new_with_dim(dim: usize) -> Self {
+        let parameter_set = GaussianParameterSet {
+            mean: DVector::zeros(dim),
+            cov: LowerTriangularMatrix::new(dim),
+        };
+
         Self { parameter_set }
     }
 
@@ -141,8 +161,16 @@ impl ParameterSet for CenteredGaussianParameterSet {
         params
     }
 
-    fn set_parameters(&mut self, params: &DVector<f64>) {
+    fn set_parameters(&mut self, params: &DVector<f64>) -> anyhow::Result<()> {
+        if params.len() != self.get_num_parameters() {
+            return Err(anyhow::anyhow!(
+                "Parameter vector length does not match covariance size"
+            ));
+        }
+
         self.cov.set_parameters_from_vector(params);
+
+        Ok(())
     }
 
     fn get_num_parameters(&self) -> usize {
@@ -177,6 +205,14 @@ impl Distribution for CenteredGaussianDistribution {
     }
 
     fn new_from_parameter_set(parameter_set: CenteredGaussianParameterSet) -> Self {
+        Self { parameter_set }
+    }
+
+    fn new_with_dim(dim: usize) -> Self {
+        let parameter_set = CenteredGaussianParameterSet {
+            cov: LowerTriangularMatrix::new(dim),
+        };
+
         Self { parameter_set }
     }
 

@@ -43,16 +43,35 @@ impl LowerTriangularMatrix {
         return self.diagonal.clone();
     }
 
-    pub fn set_diagonal(&mut self, diagonal: DVector<f64>) {
+    pub fn set_diagonal(&mut self, diagonal: DVector<f64>) -> anyhow::Result<()> {
+        if diagonal.len() != self.size {
+            return Err(anyhow::anyhow!(
+                "Diagonal vector has incorrect length: expected {}, got {}",
+                self.size,
+                diagonal.len()
+            ));
+        }
         self.diagonal = diagonal;
+
+        Ok(())
     }
 
     pub fn get_lower_elements(&self) -> DVector<f64> {
         return self.lower_elements.clone();
     }
 
-    pub fn set_lower_elements(&mut self, lower_elements: DVector<f64>) {
+    pub fn set_lower_elements(&mut self, lower_elements: DVector<f64>) -> anyhow::Result<()> {
+        if lower_elements.len() != self.size * (self.size - 1) / 2 {
+            return Err(anyhow::anyhow!(
+                "Lower elements vector has incorrect length: expected {}, got {}",
+                self.size * (self.size - 1) / 2,
+                lower_elements.len()
+            ));
+        }
+
         self.lower_elements = lower_elements;
+
+        Ok(())
     }
 
     pub fn get_size(&self) -> usize {
@@ -73,10 +92,20 @@ impl LowerTriangularMatrix {
         );
     }
 
-    pub fn set_parameters_from_vector(&mut self, params: &DVector<f64>) {
+    pub fn set_parameters_from_vector(&mut self, params: &DVector<f64>) -> anyhow::Result<()> {
+        if params.len() != self.get_num_parameters() {
+            return Err(anyhow::anyhow!(
+                "Parameter vector has incorrect length: expected {}, got {}",
+                self.get_num_parameters(),
+                params.len()
+            ));
+        }
+
         let size = self.size;
         self.diagonal = params.rows(0, size).into_owned();
         self.lower_elements = params.rows(size, size * (size - 1) / 2).into_owned();
+
+        Ok(())
     }
 }
 
@@ -123,10 +152,20 @@ impl SchurStableMatrix {
         )
     }
 
-    pub fn set_parameters_from_vector(&mut self, params: &DVector<f64>) {
+    pub fn set_parameters_from_vector(&mut self, params: &DVector<f64>) -> anyhow::Result<()> {
+        if params.len() != self.get_num_parameters() {
+            return Err(anyhow::anyhow!(
+                "Parameter vector has incorrect length: expected {}, got {}",
+                self.get_num_parameters(),
+                params.len()
+            ));
+        }
+
         let size = self.dim * self.dim;
         self.A = DMatrix::from_row_slice(self.dim, self.dim, (&params.rows(0, size)).into());
         self.B = DMatrix::from_row_slice(self.dim, self.dim, (&params.rows(size, size)).into());
+
+        Ok(())
     }
 }
 
@@ -138,8 +177,10 @@ mod tests {
     fn test_lower_triangular_matrix() {
         let size = 3;
         let mut ltm = LowerTriangularMatrix::new(size);
-        ltm.set_diagonal(DVector::from_vec(vec![1.0, 2.0, 3.0]));
-        ltm.set_lower_elements(DVector::from_vec(vec![0.5, 0.5, 0.5]));
+        ltm.set_diagonal(DVector::from_vec(vec![1.0, 2.0, 3.0]))
+            .unwrap();
+        ltm.set_lower_elements(DVector::from_vec(vec![0.5, 0.5, 0.5]))
+            .unwrap();
         let dense = ltm.to_dense();
         assert_eq!(dense[(0, 0)], 1.0);
         assert_eq!(dense[(1, 1)], 2.0);
@@ -164,7 +205,8 @@ mod tests {
         // variation 1 - A all zeros
         ssm.set_parameters_from_vector(&DVector::from_vec(vec![
             0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0,
-        ]));
+        ]))
+        .unwrap();
         let dense = ssm.to_dense();
         let eigvals = dense.complex_eigenvalues();
         for eig in eigvals.iter() {
@@ -174,7 +216,8 @@ mod tests {
         // variation 2 - B all zeros
         ssm.set_parameters_from_vector(&DVector::from_vec(vec![
             0.5, 0.0, 0.0, 0.5, 0.0, 0.0, 0.0, 0.0,
-        ]));
+        ]))
+        .unwrap();
         let dense = ssm.to_dense();
         let eigvals = dense.complex_eigenvalues();
         for eig in eigvals.iter() {

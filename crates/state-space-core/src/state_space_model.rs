@@ -56,11 +56,8 @@ pub trait StateSpaceModel<
     ) -> (Vec<DVector<f64>>, Vec<DVector<f64>>);
 }
 
-pub struct LinearStateSpaceParameters<
-    InitialDist,
-    StateDist,
-    ObsDist,
-> where
+pub struct LinearStateSpaceParameters<InitialDist, StateDist, ObsDist>
+where
     InitialDist: Distribution,
     StateDist: Distribution,
     ObsDist: Distribution,
