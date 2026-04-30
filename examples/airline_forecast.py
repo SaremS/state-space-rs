@@ -48,7 +48,7 @@ def neg_log_likelihood(theta: np.ndarray) -> float:
     """Negative log-likelihood using our model's built-in method."""
     model = LinearGaussianSSM(SIZE_STATE, SIZE_OBS)
     try:
-        model.set_parameters_from_vector(theta)
+        model.set_parameters(theta)
         ll = model.log_likelihood(y.reshape(-1, SIZE_OBS)) / SIZE_OBS
         if not np.isfinite(ll):
             return 1e10
@@ -93,7 +93,7 @@ print(f"Optimal params: {result.x}")
 # ── 5. Forecast 12 steps ahead ───────────────────────────────────────────────
 
 fitted = LinearGaussianSSM(SIZE_STATE, SIZE_OBS)
-fitted.set_parameters_from_vector(result.x)
+fitted.set_parameters(result.x)
 
 observations = y.reshape(-1, SIZE_OBS)
 forecast_dists = fitted.forecast(observations, 24)
