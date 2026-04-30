@@ -304,7 +304,7 @@ impl LinearGaussianStateSpaceModel {
 
             let predicted_observation_mean = &observation_matrix * &next_mean;
             
-            let predicted_observation_cov = &observation_matrix * &next_cov * observation_matrix.transpose()
+            let mut predicted_observation_cov = &observation_matrix * &next_cov * observation_matrix.transpose()
                 + &observation_noise_cov;
 
             let current_observation = &observations[t];
