@@ -1,7 +1,7 @@
 use nalgebra::{DMatrix, DVector};
-use std::marker::PhantomData;
-use rand::SeedableRng; 
+use rand::SeedableRng;
 use rand::rngs::StdRng;
+use std::marker::PhantomData;
 
 use crate::{
     distributions::{CenteredGaussianDistribution, Distribution, GaussianDistribution},
@@ -314,13 +314,12 @@ impl LinearGaussianStateSpaceModel {
     }
 }
 
-
 impl StateSpaceModel for LinearGaussianStateSpaceModel {
     type Parameters = LinearStateSpaceParameters<
         GaussianDistribution,
         CenteredGaussianDistribution,
-        CenteredGaussianDistribution
-            >;
+        CenteredGaussianDistribution,
+    >;
     type InitialStateDist = GaussianDistribution;
     type StateDist = GaussianDistribution;
     type ObsDist = GaussianDistribution;
@@ -365,7 +364,9 @@ impl StateSpaceModel for LinearGaussianStateSpaceModel {
         if observations.len() > 0 {
             filtered_states = self.filter_state(observations, observed_control_variables);
         } else {
-            let initial_state = GaussianDistribution::new_from_params(current_state_mean, current_state_cov).unwrap();
+            let initial_state =
+                GaussianDistribution::new_from_params(current_state_mean, current_state_cov)
+                    .unwrap();
             filtered_states = vec![initial_state];
         }
 
@@ -374,32 +375,47 @@ impl StateSpaceModel for LinearGaussianStateSpaceModel {
 
         for _ in 0..*forecast_steps {
             let next_mean = &transition_matrix * &latest_state.get_mean();
-            let next_cov = &transition_matrix * &latest_state.get_cov() * transition_matrix.transpose()
-                + &process_noise_cov;
+            let next_cov =
+                &transition_matrix * &latest_state.get_cov() * transition_matrix.transpose()
+                    + &process_noise_cov;
 
             latest_state = GaussianDistribution::new_from_params(next_mean, next_cov).unwrap();
 
-            let forecasted_observation_mean: DVector<f64> = &observation_matrix * &latest_state.get_mean();
+            let forecasted_observation_mean: DVector<f64> =
+                &observation_matrix * &latest_state.get_mean();
             let forecasted_observation_cov =
                 &observation_matrix * &latest_state.get_cov() * &observation_matrix.transpose()
                     + &observation_noise_cov;
 
-            forecasted_observations.push(GaussianDistribution::new_from_params(
-                forecasted_observation_mean,
-                forecasted_observation_cov,
-            ).unwrap());
+            forecasted_observations.push(
+                GaussianDistribution::new_from_params(
+                    forecasted_observation_mean,
+                    forecasted_observation_cov,
+                )
+                .unwrap(),
+            );
         }
 
         return forecasted_observations;
     }
 
-    fn filter_state(&self, observations: &Vec<DMatrix<f64>>, observed_control_variables: Option<&Vec<DMatrix<f64>>>) -> Vec<GaussianDistribution> {
-        let (_, filtered_states) = self.filter_state_internal(observations, observed_control_variables);
+    fn filter_state(
+        &self,
+        observations: &Vec<DMatrix<f64>>,
+        observed_control_variables: Option<&Vec<DMatrix<f64>>>,
+    ) -> Vec<GaussianDistribution> {
+        let (_, filtered_states) =
+            self.filter_state_internal(observations, observed_control_variables);
         return filtered_states;
     }
 
-    fn smooth_state(&self, observations: &Vec<DMatrix<f64>>, observed_control_variables: Option<&Vec<DMatrix<f64>>>) -> Vec<GaussianDistribution> {
-        let (predicted_states, filtered_states) = self.filter_state_internal(observations, observed_control_variables);
+    fn smooth_state(
+        &self,
+        observations: &Vec<DMatrix<f64>>,
+        observed_control_variables: Option<&Vec<DMatrix<f64>>>,
+    ) -> Vec<GaussianDistribution> {
+        let (predicted_states, filtered_states) =
+            self.filter_state_internal(observations, observed_control_variables);
 
         let transition_matrix = self.parameters.get_transition_matrix();
 
@@ -413,19 +429,22 @@ impl StateSpaceModel for LinearGaussianStateSpaceModel {
 
             let smoothing_gain = &filtered_state.get_cov()
                 * transition_matrix.transpose()
-                * predicted_next_state.get_cov().clone().try_inverse().unwrap();
+                * predicted_next_state
+                    .get_cov()
+                    .clone()
+                    .try_inverse()
+                    .unwrap();
 
             let smoothed_mean = &filtered_state.get_mean()
-                + &smoothing_gain * (&smoothed_next_state.get_mean() - &predicted_next_state.get_mean());
+                + &smoothing_gain
+                    * (&smoothed_next_state.get_mean() - &predicted_next_state.get_mean());
             let smoothed_cov = &filtered_state.get_cov()
                 + &smoothing_gain
                     * (&smoothed_next_state.get_cov() - &predicted_next_state.get_cov())
                     * smoothing_gain.transpose();
 
-            smoothed_states.push(GaussianDistribution::new_from_params(
-                smoothed_mean,
-                smoothed_cov,
-            ).unwrap());
+            smoothed_states
+                .push(GaussianDistribution::new_from_params(smoothed_mean, smoothed_cov).unwrap());
         }
 
         smoothed_states.reverse();
@@ -439,7 +458,6 @@ impl StateSpaceModel for LinearGaussianStateSpaceModel {
         observed_control_variables: Option<&Vec<DMatrix<f64>>>,
         seed: Option<u64>,
     ) -> (Vec<DVector<f64>>, Vec<DVector<f64>>) {
-  
         let initial_dist = &(self.parameters.get_initial_state_dist());
         let state_dist = &(self.parameters.get_state_dist());
         let obs_dist = &(self.parameters.get_observation_dist());
@@ -449,10 +467,10 @@ impl StateSpaceModel for LinearGaussianStateSpaceModel {
         let process_noise_cov = state_dist.get_cov();
         let observation_noise_cov = obs_dist.get_cov();
 
-        let mut current_state = initial_state.unwrap_or_else(|| GaussianDistribution::new_from_params(
-            initial_dist.get_mean(),
-            initial_dist.get_cov(),
-        ).unwrap());
+        let mut current_state = initial_state.unwrap_or_else(|| {
+            GaussianDistribution::new_from_params(initial_dist.get_mean(), initial_dist.get_cov())
+                .unwrap()
+        });
 
         let mut states = vec![];
         let mut observations = vec![];
@@ -464,7 +482,8 @@ impl StateSpaceModel for LinearGaussianStateSpaceModel {
                 &transition_matrix * &current_state.get_mean(),
                 &transition_matrix * &current_state.get_cov() * &transition_matrix.transpose()
                     + &process_noise_cov,
-            ).unwrap();
+            )
+            .unwrap();
 
             match seeded_rng.as_mut() {
                 Some(rng) => states.push(current_state.sample_with_rng(rng)),
@@ -476,7 +495,11 @@ impl StateSpaceModel for LinearGaussianStateSpaceModel {
                 &observation_matrix * &current_state.get_cov() * &observation_matrix.transpose()
                     + &observation_noise_cov;
 
-            let observation_dist = GaussianDistribution::new_from_params(observation_mean.clone(), observation_cov.clone()).unwrap();
+            let observation_dist = GaussianDistribution::new_from_params(
+                observation_mean.clone(),
+                observation_cov.clone(),
+            )
+            .unwrap();
 
             match seeded_rng.as_mut() {
                 Some(rng) => observations.push(observation_dist.sample_with_rng(rng)),
