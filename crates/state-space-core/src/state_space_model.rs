@@ -516,11 +516,13 @@ impl StateSpaceModel for LinearGaussianStateSpaceModel {
     }
 }
 
-/*
 #[cfg(test)]
 mod tests {
     use super::*;
     use nalgebra::DMatrix;
+
+    use crate::distributions::GaussianDistribution;
+    use crate::linear_algebra::LowerTriangularMatrix;
 
     #[test]
     fn test_linear_gaussian_state_space_model_forecast() {
@@ -528,13 +530,13 @@ mod tests {
         let size_observation = 2;
         let model = LinearGaussianStateSpaceModel::new(size_state, size_observation);
 
-        let forecast = model.forecast(&vec![], &3);
+        let forecast = model.forecast(&vec![], &3, None, None);
 
         assert_eq!(forecast.len(), 3);
         for obs in forecast {
-            assert_eq!(obs.mean.len(), size_observation);
-            assert_eq!(obs.cov.nrows(), size_observation);
-            assert_eq!(obs.cov.ncols(), size_observation);
+            assert_eq!(obs.get_mean().len(), size_observation);
+            assert_eq!(obs.get_cov().nrows(), size_observation);
+            assert_eq!(obs.get_cov().ncols(), size_observation);
         }
     }
 
@@ -549,13 +551,13 @@ mod tests {
             DMatrix::from_vec(size_observation, 1, vec![0.0, 1.0]),
         ];
 
-        let filtered_states = model.filter_state(&observations);
+        let filtered_states = model.filter_state(&observations, None);
 
         assert_eq!(filtered_states.len(), observations.len());
         for state in filtered_states {
-            assert_eq!(state.mean.len(), size_state);
-            assert_eq!(state.cov.nrows(), size_state);
-            assert_eq!(state.cov.ncols(), size_state);
+            assert_eq!(state.get_mean().len(), size_state);
+            assert_eq!(state.get_cov().nrows(), size_state);
+            assert_eq!(state.get_cov().ncols(), size_state);
         }
     }
 
@@ -570,13 +572,13 @@ mod tests {
             DMatrix::from_vec(size_observation, 1, vec![0.0, 1.0]),
         ];
 
-        let smoothed_states = model.smooth_state(&observations);
+        let smoothed_states = model.smooth_state(&observations, None);
 
         assert_eq!(smoothed_states.len(), observations.len());
         for state in smoothed_states {
-            assert_eq!(state.mean.len(), size_state);
-            assert_eq!(state.cov.nrows(), size_state);
-            assert_eq!(state.cov.ncols(), size_state);
+            assert_eq!(state.get_mean().len(), size_state);
+            assert_eq!(state.get_cov().nrows(), size_state);
+            assert_eq!(state.get_cov().ncols(), size_state);
         }
     }
 
@@ -586,7 +588,7 @@ mod tests {
         let size_observation = 2;
         let model = LinearGaussianStateSpaceModel::new(size_state, size_observation);
 
-        let (states, observations) = model.sample(&5, None, None);
+        let (states, observations) = model.sample(&5, None, None, None);
 
         assert_eq!(states.len(), 5);
         for state in &states {
@@ -605,8 +607,8 @@ mod tests {
     fn test_seeded_sample_is_deterministic() {
         let model = LinearGaussianStateSpaceModel::new(2, 2);
 
-        let (states_a, obs_a) = model.sample(&10, None, Some(42));
-        let (states_b, obs_b) = model.sample(&10, None, Some(42));
+        let (states_a, obs_a) = model.sample(&10, None, None, Some(42));
+        let (states_b, obs_b) = model.sample(&10, None, None, Some(42));
 
         for (a, b) in states_a.iter().zip(states_b.iter()) {
             assert_eq!(a, b);
@@ -616,7 +618,7 @@ mod tests {
         }
 
         // Different seed produces different results
-        let (states_c, _) = model.sample(&10, None, Some(99));
+        let (states_c, _) = model.sample(&10, None, None, Some(99));
         assert_ne!(states_a, states_c);
     }
 
@@ -698,51 +700,32 @@ mod tests {
     }
 
     // --- LinearGaussianStateSpaceParameters tests ---
-
-    #[test]
-    fn test_parameters_setters() {
-        let mut params = LinearGaussianStateSpaceParameters::new(2, 2);
-
-        params.set_initial_mean(DVector::from_vec(vec![1.0, 2.0]));
-        assert_eq!(params.get_initial_mean(), DVector::from_vec(vec![1.0, 2.0]));
-
-        params.set_initial_cov_dec(&DVector::from_vec(vec![2.0, 3.0, 0.5]));
-        let cov = params.get_initial_cov();
-        assert!(cov[(0, 0)] > 0.0); // L * L^T is PSD
-
-        params.set_transition_matrix(DMatrix::from_vec(2, 2, vec![0.9, 0.0, 0.0, 0.8]));
-        assert_eq!(params.get_transition_matrix()[(0, 0)], 0.9);
-
-        params.set_observation_matrix(DMatrix::from_vec(2, 2, vec![1.0, 0.0, 0.0, 1.0]));
-        assert_eq!(params.get_observation_matrix()[(0, 0)], 1.0);
-
-        params.set_process_noise_cov_dec(&DVector::from_vec(vec![0.5, 0.5, 0.1]));
-        let q = params.get_process_noise_cov();
-        assert!(q[(0, 0)] > 0.0);
-
-        params.set_observation_noise_cov_dec(&DVector::from_vec(vec![0.3, 0.3, 0.0]));
-        let r = params.get_observation_noise_cov();
-        assert!(r[(0, 0)] > 0.0);
-    }
-
     #[test]
     fn test_parameter_set_round_trip() {
-        let mut params = LinearGaussianStateSpaceParameters::new(2, 2);
-        params.set_initial_mean(DVector::from_vec(vec![1.0, 2.0]));
-        params.set_transition_matrix(DMatrix::from_vec(2, 2, vec![0.9, 0.0, 0.0, 0.8]));
+        let params = LinearStateSpaceParameters::new_from_dist(
+            GaussianDistribution::new_with_dim(2),
+            CenteredGaussianDistribution::new_with_dim(2),
+            CenteredGaussianDistribution::new_with_dim(2),
+        )
+        .unwrap();
 
         let vec = params.get_parameters();
         let expected_len = 2  // initial_mean
             + 3  // initial_cov_dec (2+1)
-            + 4  // transition_matrix (2x2)
+            + 2*4  // transition_matrix (2 x 2x2)
             + 4  // observation_matrix (2x2)
             + 3  // process_noise_cov_dec (2+1)
             + 3; // observation_noise_cov_dec (2+1)
         assert_eq!(vec.len(), expected_len);
 
         // Round-trip: set_parameters then get_parameters should give same vector
-        let mut params2 = LinearGaussianStateSpaceParameters::new(2, 2);
-        params2.set_parameters(&vec);
+        let mut params2 = LinearStateSpaceParameters::new_from_dist(
+            GaussianDistribution::new_with_dim(2),
+            CenteredGaussianDistribution::new_with_dim(2),
+            CenteredGaussianDistribution::new_with_dim(2),
+        )
+        .unwrap();
+        params2.set_parameters(&vec).unwrap();
         let vec2 = params2.get_parameters();
         for i in 0..vec.len() {
             assert!(
@@ -760,15 +743,15 @@ mod tests {
     #[test]
     fn test_model_get_set_parameters_as_vector() {
         let mut model = LinearGaussianStateSpaceModel::new(2, 2);
-        let params = model.get_parameters_as_vector();
+        let params = model.get_parameters();
         assert!(!params.is_empty());
 
         // Modify and set back
         let mut modified = params.clone();
         modified[0] = 99.0;
-        model.set_parameters_as_vector(&modified);
+        model.set_parameters(&modified);
 
-        let retrieved = model.get_parameters_as_vector();
+        let retrieved = model.get_parameters();
         assert_eq!(retrieved[0], 99.0);
     }
 
@@ -781,26 +764,25 @@ mod tests {
             DMatrix::from_vec(2, 1, vec![1.5, 0.3]),
         ];
 
-        let forecast = model.forecast(&observations, &2);
+        let forecast = model.forecast(&observations, &2, None, None);
         assert_eq!(forecast.len(), 2);
         for f in &forecast {
-            assert_eq!(f.mean.len(), 2);
-            assert_eq!(f.cov.nrows(), 2);
+            assert_eq!(f.get_mean().len(), 2);
+            assert_eq!(f.get_cov().nrows(), 2);
         }
     }
 
     #[test]
     fn test_sample_with_initial_state() {
         let model = LinearGaussianStateSpaceModel::new(2, 2);
-        let initial = GaussianDistribution {
-            mean: DVector::from_vec(vec![5.0, 5.0]),
-            cov: DMatrix::identity(2, 2) * 0.1,
-        };
+        let initial = GaussianDistribution::new_from_params(
+            DVector::from_vec(vec![5.0, 5.0]),
+            DMatrix::identity(2, 2) * 0.1,
+        )
+        .unwrap();
 
-        let (states, obs) = model.sample(&5, Some(initial), Some(123));
+        let (states, obs) = model.sample(&5, Some(initial), None, Some(123));
         assert_eq!(states.len(), 5);
         assert_eq!(obs.len(), 5);
     }
 }
-
-*/
