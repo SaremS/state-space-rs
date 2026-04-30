@@ -40,10 +40,8 @@ y = diff12  # stationary series to model
 
 # ── 3. Build a 1×1 local-level model and define neg-log-likelihood ────────────
 
-SIZE_STATE = 2
+SIZE_STATE = 1
 SIZE_OBS = 1
-
-
 
 
 def neg_log_likelihood(theta: np.ndarray) -> float:
