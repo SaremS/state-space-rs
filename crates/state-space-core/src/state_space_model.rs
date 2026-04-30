@@ -232,31 +232,36 @@ impl LinearGaussianStateSpaceModel {
         }
     }
 
-    /*
-    pub fn log_likelihood(&self, observations: &Vec<DMatrix<f64>>) -> anyhow::Result<f64> {
-        let filtered_states = self.filter_state(observations);
+    pub fn log_likelihood(
+        &self,
+        observations: &Vec<DMatrix<f64>>,
+        observation_control_variables: Option<&Vec<DMatrix<f64>>>,
+    ) -> anyhow::Result<f64> {
+        let filtered_states = self.filter_state(observations, observation_control_variables);
         let observation_matrix = self.parameters.get_observation_matrix();
-        let observation_noise_cov = self.parameters.get_observation_noise_cov();
+        let observation_noise_cov = self.parameters.get_observation_dist().get_cov();
 
         let mut log_likelihood = 0.0;
 
         for (t, obs) in observations.iter().enumerate() {
-            let predicted_observation_mean = &observation_matrix * &filtered_states[t].mean;
-            let predicted_observation_cov =
-                &observation_matrix * &filtered_states[t].cov * observation_matrix.transpose()
-                    + &observation_noise_cov;
+            let predicted_observation_mean = &observation_matrix * &filtered_states[t].get_mean();
+            let predicted_observation_cov = &observation_matrix
+                * &filtered_states[t].get_cov()
+                * observation_matrix.transpose()
+                + &observation_noise_cov;
 
-            let obs_dist = GaussianDistribution {
-                mean: predicted_observation_mean,
-                cov: predicted_observation_cov,
-            };
+            let obs_dist = GaussianDistribution::new_from_params(
+                predicted_observation_mean,
+                predicted_observation_cov,
+            )
+            .unwrap();
 
             let obs_vec = obs.column(0).into_owned();
             log_likelihood += obs_dist.log_prob(&obs_vec)?;
         }
 
         Ok(log_likelihood)
-    }*/
+    }
 
     fn filter_state_internal(
         &self,
