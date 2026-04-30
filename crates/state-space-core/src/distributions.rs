@@ -113,7 +113,8 @@ impl GaussianDistribution {
     }
 
     pub fn get_cov(&self) -> DMatrix<f64> {
-        self.parameter_set.cov.to_dense().clone()
+        let cov_chol = self.parameter_set.cov.get_cholesky_representation();
+        cov_chol.l().transpose()*cov_chol.l()
     }
 
     pub fn get_cov_cholesky(&self) -> Cholesky<f64, Dynamic> {
@@ -249,7 +250,8 @@ impl CenteredGaussianDistribution {
     }
 
     pub fn get_cov(&self) -> DMatrix<f64> {
-        self.parameter_set.cov.to_dense().clone()
+        let cov_chol = self.parameter_set.cov.get_cholesky_representation();
+        cov_chol.l().transpose()*cov_chol.l()
     }
 
     pub fn get_cov_cholesky(&self) -> Cholesky<f64, Dynamic> {
