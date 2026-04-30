@@ -287,7 +287,7 @@ impl LinearGaussianStateSpaceModel {
 
         let identity = DMatrix::<f64>::identity(current_state_cov.nrows(), current_state_cov.ncols());
 
-        let epsilon = 1e-9; // Tune this: 1e-9 to 1e-12 is typical for f64
+        let epsilon = 1e-6;
         let n = self.parameters.dim_state; 
         let jitter = DMatrix::<f64>::identity(n, n) * epsilon;
 
