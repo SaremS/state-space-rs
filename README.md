@@ -50,18 +50,33 @@ maturin develop --release
 ## Usage
 
 ```python
-import kalman_rs
+import numpy as np
 
-state_space_rs.sum_as_string(2, 3)  # "5"
-state_space_rs.add(2, 3)            # 5
+from state_space_rs import GaussianDistribution, LinearGaussianSSM
+
+model = LinearGaussianSSM(size_state=2, size_observation=2)
+params = model.get_parameters()
+model.set_parameters(params)
+
+states, observations = model.sample(
+    10,
+    initial_state=GaussianDistribution(
+        np.zeros(2),
+        np.eye(2),
+    ),
+    seed=42,
+)
+
+filtered = model.filter_state(observations)
+forecast = model.forecast(observations, 3)
 ```
 
-### Available Functions
+### Available Classes
 
-| Function | Signature | Description |
+| Class | Key methods | Description |
 |---|---|---|
-| `sum_as_string` | `(a: int, b: int) -> str` | Returns the sum of two numbers as a string |
-| `add` | `(a: int, b: int) -> int` | Returns the sum of two integers |
+| `LinearGaussianSSM` | `get_parameters`, `set_parameters`, `get_num_parameters`, `log_likelihood`, `forecast`, `filter_state`, `smooth_state`, `sample` | Linear Gaussian state-space model backed by `state-space-core` |
+| `GaussianDistribution` | `mean`, `cov`, `log_prob` | Multivariate Gaussian distribution used for forecasts and filtered/smoothed state outputs |
 
 
 ### Python Visualization Example

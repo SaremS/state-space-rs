@@ -48,7 +48,7 @@ def neg_log_likelihood(theta: np.ndarray) -> float:
     """Negative log-likelihood using our model's built-in method."""
     model = LinearGaussianSSM(SIZE_STATE, SIZE_OBS)
     try:
-        model.set_parameters_from_vector(theta)
+        model.set_parameters(theta)
         ll = model.log_likelihood(y.reshape(-1, SIZE_OBS)) / SIZE_OBS
         if not np.isfinite(ll):
             return 1e10
@@ -65,27 +65,17 @@ def neg_log_likelihood(theta: np.ndarray) -> float:
 # Bounds enforce stationarity (|transition| < 1) and positive-definite
 # covariances (decomposition diagonals bounded away from zero).
 
-x0 = np.array([
-    0.0,   # initial_mean
-    1.0,   # initial_cov_dec diagonal
-    0.5,   # transition (stationary)
-    1.0,   # observation
-    0.1,   # process noise cov dec diagonal
-    0.1,   # observation noise cov dec diagonal
-])
+
+model = LinearGaussianSSM(SIZE_STATE, SIZE_OBS)
+x0 = model.get_parameters()
 
 bounds = [
-    (-1.0, 1.0),       # initial_mean
-    (1e-4, 10.0),      # initial_cov_dec diagonal
-    (-0.999, 0.999),   # transition (stationarity)
-    (0.1, 10.0),       # observation
-    (1e-4, 10.0),      # process noise cov dec diagonal
-    (1e-4, 10.0),      # observation noise cov dec diagonal
+    (None, None) for _ in range(len(x0))
 ]
 
 result = minimize(
     neg_log_likelihood, x0, method="L-BFGS-B", bounds=bounds,
-    options={"maxiter": 2000, "ftol": 1e-12},
+    options={"maxiter": 5000, "ftol": 1e-12},
 )
 print(f"Optimization: success={result.success}, nll={result.fun:.4f}")
 print(f"Optimal params: {result.x}")
@@ -93,7 +83,7 @@ print(f"Optimal params: {result.x}")
 # ── 5. Forecast 12 steps ahead ───────────────────────────────────────────────
 
 fitted = LinearGaussianSSM(SIZE_STATE, SIZE_OBS)
-fitted.set_parameters_from_vector(result.x)
+fitted.set_parameters(result.x)
 
 observations = y.reshape(-1, SIZE_OBS)
 forecast_dists = fitted.forecast(observations, 24)
