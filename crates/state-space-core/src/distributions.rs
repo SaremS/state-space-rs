@@ -266,17 +266,20 @@ impl Distribution for CenteredGaussianDistribution {
     }
 
     fn log_prob(&self, x: &DVector<f64>) -> anyhow::Result<f64> {
-        let cov = self.parameter_set.cov.to_dense();
-        let d = cov.nrows() as f64;
-        let cov_inv = cov
-            .clone()
-            .try_inverse()
-            .ok_or_else(|| anyhow::anyhow!("Covariance matrix is not invertible"))?;
-        let exponent = -0.5 * x.transpose() * cov_inv * x;
-        let log_det_cov = cov.determinant().ln();
+        let d = self.get_dim() as f64;
 
-        let result =
-            exponent[(0, 0)] - 0.5 * log_det_cov - 0.5 * d * (2.0 * std::f64::consts::PI).ln();
+        let l_matrix = self.parameter_set.cov.get_diagonal();
+
+        let log_det_cov: f64 = l_matrix.iter().map(|val| val.ln()).sum::<f64>() * 2.0;
+
+        let cov_L = self.parameter_set.cov.get_cholesky_representation();
+        let precision_times_diff = cov_L.solve(x);
+        let mahalanobis_squared = x.dot(&precision_times_diff);
+
+        let result = -0.5 * mahalanobis_squared
+            - 0.5 * log_det_cov
+            - 0.5 * d * (2.0 * std::f64::consts::PI).ln();
+
         Ok(result)
     }
 
