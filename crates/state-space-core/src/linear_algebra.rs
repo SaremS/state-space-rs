@@ -199,8 +199,8 @@ impl SchurStableMatrix {
         }
 
         let size = self.dim * self.dim;
-        self.A = DMatrix::from_row_slice(self.dim, self.dim, (&params.rows(0, size)).into());
-        self.B = DMatrix::from_row_slice(self.dim, self.dim, (&params.rows(size, size)).into());
+        self.A = DMatrix::from_column_slice(self.dim, self.dim, (&params.rows(0, size)).into());
+        self.B = DMatrix::from_column_slice(self.dim, self.dim, (&params.rows(size, size)).into());
 
         Ok(())
     }
@@ -211,7 +211,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_lower_triangular_matrix() {
+    fn test_lower_triangular_matrix_set() {
         let size = 3;
         let mut ltm = LowerTriangularMatrix::new(size);
         ltm.set_diagonal(DVector::from_vec(vec![1.0, 2.0, 3.0]))
@@ -228,7 +228,33 @@ mod tests {
     }
 
     #[test]
-    fn test_schur_stable_matrix() {
+    fn test_lower_triangular_matrix_get_set_get() {
+        let size = 3;
+        let mut ltm = LowerTriangularMatrix::new(size);
+        let params = ltm.get_parameters_as_vector();
+        ltm.set_parameters_from_vector(&params).unwrap();
+        let params_after = ltm.get_parameters_as_vector();
+
+        for (p, p_after) in params.iter().zip(params_after.iter()) {
+            assert!((p - p_after).abs() < 1e-6);
+        }
+    }
+
+    #[test]
+    fn test_schur_stable_matrix_get_set_get() {
+        let dim = 2;
+        let mut ssm = SchurStableMatrix::new(dim);
+        let params = ssm.get_parameters_as_vector();
+        ssm.set_parameters_from_vector(&params).unwrap();
+        let params_after = ssm.get_parameters_as_vector();
+
+        for (p, p_after) in params.iter().zip(params_after.iter()) {
+            assert!((p - p_after).abs() < 1e-6);
+        }
+    }
+
+    #[test]
+    fn test_schur_stable_matrix_eigenvalues() {
         // Check that the eigenvalues of the resulting matrix are inside the unit circle
         // variation 0 - default parameters
         let dim = 2;
