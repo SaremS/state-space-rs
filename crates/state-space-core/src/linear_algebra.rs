@@ -1,26 +1,53 @@
-use nalgebra::{DMatrix, DVector};
+use nalgebra::{DMatrix, DVector, Dynamic, linalg::Cholesky};
 
 #[derive(Clone)]
 pub struct LowerTriangularMatrix {
     size: usize,
     diagonal: DVector<f64>,
     lower_elements: DVector<f64>,
+    cholesky_representation: Cholesky<f64, Dynamic>,
 }
 
 impl LowerTriangularMatrix {
     pub fn new(size: usize) -> Self {
+        let diagonal = DVector::from_element(size, 1.0);
+        let lower_elements = DVector::zeros(size * (size - 1) / 2);
+        let dense = DMatrix::from_fn(size, size, |i, j| {
+            if i == j {
+                diagonal[i]
+            } else if i > j {
+                let idx = (i * (i - 1)) / 2 + j;
+                lower_elements[idx]
+            } else {
+                0.0
+            }
+        });
+        let cholesky_representation = Cholesky::pack_dirty(dense);
+
         Self {
             size,
-            diagonal: DVector::from_element(size, 1.0),
-            lower_elements: DVector::zeros(size * (size - 1) / 2),
+            diagonal,
+            lower_elements,
+            cholesky_representation,
         }
     }
 
     pub fn new_with_values(size: usize, diagonal_value: f64, lower_value: f64) -> Self {
+        let dense = DMatrix::from_fn(size, size, |i, j| {
+            if i == j {
+                diagonal_value
+            } else if i > j {
+                lower_value
+            } else {
+                0.0
+            }
+        });
+        let cholesky_representation = Cholesky::pack_dirty(dense);
         Self {
             size,
             diagonal: DVector::from_element(size, diagonal_value),
             lower_elements: DVector::from_element(size * (size - 1) / 2, lower_value),
+            cholesky_representation,
         }
     }
 
@@ -34,14 +61,16 @@ impl LowerTriangularMatrix {
         }
 
         let size = mat.nrows();
-        let cholesky = mat.cholesky();
-        if cholesky.is_none() {
+        let cholesky_representation = mat.cholesky();
+        if cholesky_representation.is_none() {
             return Err(anyhow::anyhow!(
                 "Input matrix must be positive definite for Cholesky decomposition"
             ));
         }
 
-        let lower = cholesky.unwrap().l();
+        let cholesky_representation = cholesky_representation.unwrap();
+
+        let lower = cholesky_representation.l();
         let mut diagonal = DVector::zeros(size);
         let mut lower_elements = DVector::zeros(size * (size - 1) / 2);
         let mut idx = 0;
@@ -58,6 +87,7 @@ impl LowerTriangularMatrix {
             size,
             diagonal,
             lower_elements,
+            cholesky_representation: cholesky_representation,
         })
     }
 
@@ -76,6 +106,10 @@ impl LowerTriangularMatrix {
         return mat;
     }
 
+    pub fn get_cholesky_representation(&self) -> Cholesky<f64, Dynamic> {
+        return self.cholesky_representation.clone();
+    }
+
     pub fn get_diagonal(&self) -> DVector<f64> {
         return self.diagonal.clone();
     }
@@ -89,6 +123,10 @@ impl LowerTriangularMatrix {
             ));
         }
         self.diagonal = diagonal;
+
+        let dense = self.to_dense();
+        let cholesky_representation = Cholesky::pack_dirty(dense);
+        self.cholesky_representation = cholesky_representation;
 
         Ok(())
     }
@@ -107,6 +145,9 @@ impl LowerTriangularMatrix {
         }
 
         self.lower_elements = lower_elements;
+        let dense = self.to_dense();
+        let cholesky_representation = Cholesky::pack_dirty(dense);
+        self.cholesky_representation = cholesky_representation;
 
         Ok(())
     }
@@ -141,6 +182,10 @@ impl LowerTriangularMatrix {
         let size = self.size;
         self.diagonal = params.rows(0, size).into_owned();
         self.lower_elements = params.rows(size, size * (size - 1) / 2).into_owned();
+
+        let dense = self.to_dense();
+        let cholesky_representation = Cholesky::pack_dirty(dense);
+        self.cholesky_representation = cholesky_representation;
 
         Ok(())
     }

@@ -40,8 +40,10 @@ y = diff12  # stationary series to model
 
 # ── 3. Build a 1×1 local-level model and define neg-log-likelihood ────────────
 
-SIZE_STATE = 1
+SIZE_STATE = 2
 SIZE_OBS = 1
+
+
 
 
 def neg_log_likelihood(theta: np.ndarray) -> float:
@@ -50,6 +52,7 @@ def neg_log_likelihood(theta: np.ndarray) -> float:
     try:
         model.set_parameters(theta)
         ll = model.log_likelihood(y.reshape(-1, SIZE_OBS)) / SIZE_OBS
+        print(ll)
         if not np.isfinite(ll):
             return 1e10
         return -ll
@@ -65,22 +68,12 @@ def neg_log_likelihood(theta: np.ndarray) -> float:
 # Bounds enforce stationarity (|transition| < 1) and positive-definite
 # covariances (decomposition diagonals bounded away from zero).
 
-x0 = np.array([
-    0.0,   # initial_mean
-    1.0,   # initial_cov_dec diagonal
-    0.5,   # transition (stationary)
-    1.0,   # observation
-    0.1,   # process noise cov dec diagonal
-    0.1,   # observation noise cov dec diagonal
-])
+
+model = LinearGaussianSSM(SIZE_STATE, SIZE_OBS)
+x0 = model.get_parameters()
 
 bounds = [
-    (-1.0, 1.0),       # initial_mean
-    (1e-4, 10.0),      # initial_cov_dec diagonal
-    (-0.999, 0.999),   # transition (stationarity)
-    (0.1, 10.0),       # observation
-    (1e-4, 10.0),      # process noise cov dec diagonal
-    (1e-4, 10.0),      # observation noise cov dec diagonal
+    (None, None) for _ in range(len(x0))
 ]
 
 result = minimize(
