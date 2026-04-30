@@ -275,8 +275,8 @@ impl LinearGaussianStateSpaceModel {
         let state_dist = &(self.parameters.get_state_dist());
         let obs_dist = &(self.parameters.get_observation_dist());
 
-        let current_state_mean = initial_dist.get_mean();
-        let current_state_cov = initial_dist.get_cov();
+        let mut current_state_mean = initial_dist.get_mean();
+        let mut current_state_cov = initial_dist.get_cov();
 
         let transition_matrix = self.parameters.get_transition_matrix();
         let observation_matrix = self.parameters.get_observation_matrix();
@@ -310,9 +310,12 @@ impl LinearGaussianStateSpaceModel {
             let updated_mean = &next_mean + &kalman_gain * &current_error;
             let updated_cov = &next_cov - &kalman_gain * &observation_matrix * &next_cov;
             let filtered_current_state =
-                GaussianDistribution::new_from_params(updated_mean, updated_cov).unwrap();
+                GaussianDistribution::new_from_params(updated_mean.clone(), updated_cov.clone()).unwrap();
 
             filtered_states.push(filtered_current_state.clone());
+
+            current_state_mean = updated_mean;
+            current_state_cov = updated_cov;
         }
 
         return (predicted_states, filtered_states);

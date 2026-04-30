@@ -52,7 +52,6 @@ def neg_log_likelihood(theta: np.ndarray) -> float:
     try:
         model.set_parameters(theta)
         ll = model.log_likelihood(y.reshape(-1, SIZE_OBS)) / SIZE_OBS
-        print(ll)
         if not np.isfinite(ll):
             return 1e10
         return -ll
@@ -77,8 +76,8 @@ bounds = [
 ]
 
 result = minimize(
-    neg_log_likelihood, x0, method="L-BFGS-B", bounds=bounds,
-    options={"maxiter": 2000, "ftol": 1e-12},
+    neg_log_likelihood, x0, method="TNC",
+    options={"maxiter": 100, "ftol": 1e-12},
 )
 print(f"Optimization: success={result.success}, nll={result.fun:.4f}")
 print(f"Optimal params: {result.x}")
