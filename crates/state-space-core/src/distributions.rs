@@ -97,7 +97,10 @@ impl GaussianDistribution {
         Ok(Self { parameter_set })
     }
 
-    pub fn new_from_params_cholesky(mean: DVector<f64>, cov_cholesky: Cholesky<f64, Dynamic>) -> Self {
+    pub fn new_from_params_cholesky(
+        mean: DVector<f64>,
+        cov_cholesky: Cholesky<f64, Dynamic>,
+    ) -> Self {
         let cov_chol = LowerTriangularMatrix::new_from_cholesky(cov_cholesky);
 
         let parameter_set = GaussianParameterSet {
@@ -114,7 +117,7 @@ impl GaussianDistribution {
 
     pub fn get_cov(&self) -> DMatrix<f64> {
         let cov_chol = self.parameter_set.cov.get_cholesky_representation();
-        cov_chol.l().transpose()*cov_chol.l()
+        cov_chol.l().transpose() * cov_chol.l()
     }
 
     pub fn get_cov_cholesky(&self) -> Cholesky<f64, Dynamic> {
@@ -251,7 +254,7 @@ impl CenteredGaussianDistribution {
 
     pub fn get_cov(&self) -> DMatrix<f64> {
         let cov_chol = self.parameter_set.cov.get_cholesky_representation();
-        cov_chol.l().transpose()*cov_chol.l()
+        cov_chol.l().transpose() * cov_chol.l()
     }
 
     pub fn get_cov_cholesky(&self) -> Cholesky<f64, Dynamic> {

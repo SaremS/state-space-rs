@@ -237,14 +237,16 @@ impl LinearGaussianStateSpaceModel {
         observations: &Vec<DMatrix<f64>>,
         observation_control_variables: Option<&Vec<DMatrix<f64>>>,
     ) -> anyhow::Result<f64> {
-        let (predicted_states, _filtered_states) = 
+        let (predicted_states, _filtered_states) =
             self.filter_state_internal(observations, observation_control_variables);
-            
+
         let observation_matrix = self.parameters.get_observation_matrix();
         let observation_noise_cov = self.parameters.get_observation_dist().get_cov();
 
         let epsilon = 1e-6;
-        let jitter = DMatrix::identity(observation_noise_cov.nrows(), observation_noise_cov.ncols()) * epsilon;
+        let jitter =
+            DMatrix::identity(observation_noise_cov.nrows(), observation_noise_cov.ncols())
+                * epsilon;
 
         let mut log_likelihood = 0.0;
 
@@ -256,7 +258,6 @@ impl LinearGaussianStateSpaceModel {
                 * observation_matrix.transpose()
                 + &observation_noise_cov
                 + &jitter;
-
 
             let obs_dist = GaussianDistribution::new_from_params(
                 predicted_observation_mean,
@@ -283,21 +284,18 @@ impl LinearGaussianStateSpaceModel {
         let obs_dist = &(self.parameters.get_observation_dist());
 
         let mut current_state_mean = initial_dist.get_mean().clone();
-        
+
         let transition_matrix = self.parameters.get_transition_matrix();
         let observation_matrix = self.parameters.get_observation_matrix();
-        
+
         let d_state = current_state_mean.nrows();
         let d_obs = observation_matrix.nrows();
 
-        let mut u_curr = initial_dist.get_cov_cholesky()
-            .l().transpose();
-            
-        let u_q = state_dist.get_cov_cholesky()
-            .l().transpose();
-            
-        let u_obs = obs_dist.get_cov_cholesky()
-            .l().transpose();
+        let mut u_curr = initial_dist.get_cov_cholesky().l().transpose();
+
+        let u_q = state_dist.get_cov_cholesky().l().transpose();
+
+        let u_obs = obs_dist.get_cov_cholesky().l().transpose();
 
         let mut predicted_states = Vec::with_capacity(num_observations);
         let mut filtered_states = Vec::with_capacity(num_observations);
@@ -306,37 +304,43 @@ impl LinearGaussianStateSpaceModel {
             let predicted_mean = &transition_matrix * &current_state_mean;
 
             let mut a_predict = DMatrix::<f64>::zeros(2 * d_state, d_state);
-            a_predict.slice_mut((0, 0), (d_state, d_state))
+            a_predict
+                .slice_mut((0, 0), (d_state, d_state))
                 .copy_from(&(u_curr * transition_matrix.transpose()));
-            a_predict.slice_mut((d_state, 0), (d_state, d_state))
+            a_predict
+                .slice_mut((d_state, 0), (d_state, d_state))
                 .copy_from(&u_q);
 
             let qr_predict = a_predict.qr();
             let r_predict_full = qr_predict.r();
-            
-            let u_predict = r_predict_full.slice((0, 0), (d_state, d_state)).into_owned();
 
-            predicted_states.push(
-                GaussianDistribution::new_from_params_cholesky(predicted_mean.clone(), Cholesky::pack_dirty(u_predict.clone()))
-            );
+            let u_predict = r_predict_full
+                .slice((0, 0), (d_state, d_state))
+                .into_owned();
+
+            predicted_states.push(GaussianDistribution::new_from_params_cholesky(
+                predicted_mean.clone(),
+                Cholesky::pack_dirty(u_predict.clone()),
+            ));
 
             let predicted_observation_mean = &observation_matrix * &predicted_mean;
             let current_observation = &observations[t];
             let current_error = current_observation - &predicted_observation_mean;
 
             let mut a_update = DMatrix::<f64>::zeros(d_obs + d_state, d_obs + d_state);
-            
-            a_update.slice_mut((0, 0), (d_obs, d_obs))
-                .copy_from(&u_obs);
-                
-            a_update.slice_mut((d_obs, 0), (d_state, d_obs))
+
+            a_update.slice_mut((0, 0), (d_obs, d_obs)).copy_from(&u_obs);
+
+            a_update
+                .slice_mut((d_obs, 0), (d_state, d_obs))
                 .copy_from(&(&u_predict * observation_matrix.transpose()));
-                
-            a_update.slice_mut((d_obs, d_obs), (d_state, d_state))
+
+            a_update
+                .slice_mut((d_obs, d_obs), (d_state, d_state))
                 .copy_from(&u_predict);
 
             let qr_update = a_update.qr();
-            let r_update = qr_update.r(); 
+            let r_update = qr_update.r();
 
             let r11 = r_update.slice((0, 0), (d_obs, d_obs));
             let r12 = r_update.slice((0, d_obs), (d_obs, d_state));
@@ -353,16 +357,16 @@ impl LinearGaussianStateSpaceModel {
 
             u_curr = r22.into_owned();
 
-            filtered_states.push(
-                GaussianDistribution::new_from_params_cholesky(updated_mean.clone(), Cholesky::pack_dirty(u_curr.clone()))
-            );
+            filtered_states.push(GaussianDistribution::new_from_params_cholesky(
+                updated_mean.clone(),
+                Cholesky::pack_dirty(u_curr.clone()),
+            ));
 
             current_state_mean = updated_mean;
         }
 
         (predicted_states, filtered_states)
     }
-
 }
 
 impl StateSpaceModel for LinearGaussianStateSpaceModel {
