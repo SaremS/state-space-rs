@@ -48,7 +48,7 @@ pub trait StateSpaceModel {
     ) -> (Vec<DVector<f64>>, Vec<DVector<f64>>);
 }
 
-struct LinearStateSpaceParameters<InitialDist, StateDist, ObsDist>
+pub struct LinearStateSpaceParameters<InitialDist, StateDist, ObsDist>
 where
     InitialDist: Distribution,
     StateDist: Distribution,
@@ -315,7 +315,19 @@ impl LinearGaussianStateSpaceModel {
 }
 
 
-impl StateSpaceModel<GaussianDistribution, GaussianDistribution> for LinearGaussianStateSpaceModel {
+impl StateSpaceModel for LinearGaussianStateSpaceModel {
+    type Parameters = LinearStateSpaceParameters<
+        GaussianDistribution,
+        CenteredGaussianDistribution,
+        CenteredGaussianDistribution
+            >;
+    type InitialStateDist = GaussianDistribution;
+    type StateDist = GaussianDistribution;
+    type ObsDist = GaussianDistribution;
+    type ForcDist = GaussianDistribution;
+    type FiltDist = GaussianDistribution;
+    type SmoothDist = GaussianDistribution;
+
     fn get_parameters(&self) -> DVector<f64> {
         let parameters = self.parameters.get_parameters();
         parameters
@@ -351,12 +363,9 @@ impl StateSpaceModel<GaussianDistribution, GaussianDistribution> for LinearGauss
         let observation_noise_cov = obs_dist.get_cov();
 
         if observations.len() > 0 {
-            filtered_states = self.filter_state(observations);
+            filtered_states = self.filter_state(observations, observed_control_variables);
         } else {
-            let initial_state = GaussianDistribution {
-                mean: initial_mean,
-                cov: initial_cov,
-            };
+            let initial_state = GaussianDistribution::new_from_params(current_state_mean, current_state_cov).unwrap();
             filtered_states = vec![initial_state];
         }
 
@@ -364,14 +373,13 @@ impl StateSpaceModel<GaussianDistribution, GaussianDistribution> for LinearGauss
         let mut forecasted_observations = vec![];
 
         for _ in 0..*forecast_steps {
-            let next_mean = &transition_matrix * &latest_state.mean;
-            let next_cov = &transition_matrix * &latest_state.cov * transition_matrix.transpose()
+            let next_mean = &transition_matrix * &latest_state.get_mean();
+            let next_cov = &transition_matrix * &latest_state.get_cov() * transition_matrix.transpose()
                 + &process_noise_cov;
 
-            latest_state.mean = next_mean;
-            latest_state.cov = next_cov;
+            latest_state = GaussianDistribution::new_from_params(next_mean, next_cov).unwrap();
 
-            let forecasted_observation_mean = &observation_matrix * &latest_state.get_mean();
+            let forecasted_observation_mean: DVector<f64> = &observation_matrix * &latest_state.get_mean();
             let forecasted_observation_cov =
                 &observation_matrix * &latest_state.get_cov() * &observation_matrix.transpose()
                     + &observation_noise_cov;
@@ -466,7 +474,7 @@ impl StateSpaceModel<GaussianDistribution, GaussianDistribution> for LinearGauss
             let observation_mean = &observation_matrix * &current_state.get_mean();
             let observation_cov =
                 &observation_matrix * &current_state.get_cov() * &observation_matrix.transpose()
-                    + &observation_noise_cov.;
+                    + &observation_noise_cov;
 
             let observation_dist = GaussianDistribution::new_from_params(observation_mean.clone(), observation_cov.clone()).unwrap();
 
