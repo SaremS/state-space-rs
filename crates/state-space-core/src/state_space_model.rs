@@ -287,16 +287,10 @@ impl LinearGaussianStateSpaceModel {
 
         let identity = DMatrix::<f64>::identity(current_state_cov.nrows(), current_state_cov.ncols());
 
-        let epsilon = 1e-6;
-        let n = self.parameters.dim_state; 
-        let jitter = DMatrix::<f64>::identity(n, n) * epsilon;
-
         for t in 0..num_observations {
             let next_mean = &transition_matrix * &current_state_mean;
-            let mut next_cov = &transition_matrix * &current_state_cov * transition_matrix.transpose()
+            let next_cov = &transition_matrix * &current_state_cov * transition_matrix.transpose()
                 + &process_noise_cov;
-
-            next_cov += &jitter;
 
             let predicted_state =
                 GaussianDistribution::new_from_params(next_mean.clone(), next_cov.clone()).unwrap();
@@ -323,8 +317,6 @@ impl LinearGaussianStateSpaceModel {
             
             let mut updated_cov = &i_kh * &next_cov * i_kh.transpose() 
                 + &kalman_gain * &observation_noise_cov * kalman_gain.transpose();
-
-            updated_cov += &jitter;
 
             let filtered_current_state =
                 GaussianDistribution::new_from_params(updated_mean.clone(), updated_cov.clone()).unwrap();
