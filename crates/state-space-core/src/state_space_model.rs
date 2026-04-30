@@ -261,7 +261,7 @@ impl LinearGaussianStateSpaceModel {
     fn filter_state_internal(
         &self,
         observations: &Vec<DMatrix<f64>>,
-        observed_control_variables: Option<&Vec<DMatrix<f64>>>,
+        _observed_control_variables: Option<&Vec<DMatrix<f64>>>,
     ) -> (Vec<GaussianDistribution>, Vec<GaussianDistribution>) {
         //return predicted states AND filtered states
         let num_observations = observations.len();
@@ -345,7 +345,7 @@ impl StateSpaceModel for LinearGaussianStateSpaceModel {
         observations: &Vec<DMatrix<f64>>,
         forecast_steps: &usize,
         observed_control_variables: Option<&Vec<DMatrix<f64>>>,
-        forecast_control_variables: Option<&Vec<DMatrix<f64>>>,
+        _forecast_control_variables: Option<&Vec<DMatrix<f64>>>,
     ) -> Vec<GaussianDistribution> {
         let filtered_states;
 
@@ -455,7 +455,7 @@ impl StateSpaceModel for LinearGaussianStateSpaceModel {
         &self,
         num_obserations: &usize,
         initial_state: Option<GaussianDistribution>,
-        observed_control_variables: Option<&Vec<DMatrix<f64>>>,
+        _observed_control_variables: Option<&Vec<DMatrix<f64>>>,
         seed: Option<u64>,
     ) -> (Vec<DVector<f64>>, Vec<DVector<f64>>) {
         let initial_dist = &(self.parameters.get_initial_state_dist());
