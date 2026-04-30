@@ -1,4 +1,4 @@
-use nalgebra::{DMatrix, DVector};
+use nalgebra::{DMatrix, DVector, Dynamic, linalg::Cholesky};
 use rand::Rng;
 use rand::rng;
 use rand_distr::{Distribution as Dist, Normal};
@@ -97,12 +97,27 @@ impl GaussianDistribution {
         Ok(Self { parameter_set })
     }
 
+    pub fn new_from_params_cholesky(mean: DVector<f64>, cov_cholesky: Cholesky<f64, Dynamic>) -> Self {
+        let cov_chol = LowerTriangularMatrix::new_from_cholesky(cov_cholesky);
+
+        let parameter_set = GaussianParameterSet {
+            mean,
+            cov: cov_chol,
+        };
+
+        Self { parameter_set }
+    }
+
     pub fn get_mean(&self) -> DVector<f64> {
         self.parameter_set.mean.clone()
     }
 
     pub fn get_cov(&self) -> DMatrix<f64> {
         self.parameter_set.cov.to_dense().clone()
+    }
+
+    pub fn get_cov_cholesky(&self) -> Cholesky<f64, Dynamic> {
+        self.parameter_set.cov.get_cholesky_representation().clone()
     }
 }
 
@@ -235,6 +250,10 @@ impl CenteredGaussianDistribution {
 
     pub fn get_cov(&self) -> DMatrix<f64> {
         self.parameter_set.cov.to_dense().clone()
+    }
+
+    pub fn get_cov_cholesky(&self) -> Cholesky<f64, Dynamic> {
+        self.parameter_set.cov.get_cholesky_representation().clone()
     }
 }
 

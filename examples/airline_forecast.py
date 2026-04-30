@@ -47,6 +47,7 @@ SIZE_OBS = 1
 def neg_log_likelihood(theta: np.ndarray) -> float:
     """Negative log-likelihood using our model's built-in method."""
     model = LinearGaussianSSM(SIZE_STATE, SIZE_OBS)
+    print(theta)
     try:
         model.set_parameters(theta)
         ll = model.log_likelihood(y.reshape(-1, SIZE_OBS)) / SIZE_OBS
@@ -74,8 +75,8 @@ bounds = [
 ]
 
 result = minimize(
-    neg_log_likelihood, x0, method="TNC",
-    options={"maxiter": 100, "ftol": 1e-12},
+    neg_log_likelihood, x0, method="L-BFGS-B", bounds=bounds,
+    options={"maxiter": 100, "ftol": 1e-6},
 )
 print(f"Optimization: success={result.success}, nll={result.fun:.4f}")
 print(f"Optimal params: {result.x}")

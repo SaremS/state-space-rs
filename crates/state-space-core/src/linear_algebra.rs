@@ -91,6 +91,29 @@ impl LowerTriangularMatrix {
         })
     }
 
+    pub fn new_from_cholesky(cholesky_representation: Cholesky<f64, Dynamic>) -> Self {
+        let size = cholesky_representation.l().nrows();
+        let lower = cholesky_representation.l();
+        let mut diagonal = DVector::zeros(size);
+        let mut lower_elements = DVector::zeros(size * (size - 1) / 2);
+        let mut idx = 0;
+
+        for i in 0..size {
+            diagonal[i] = lower[(i, i)];
+            for j in 0..i {
+                lower_elements[idx] = lower[(i, j)];
+                idx += 1;
+            }
+        }
+
+        Self {
+            size,
+            diagonal,
+            lower_elements,
+            cholesky_representation,
+        }
+    }
+
     pub fn to_dense(&self) -> DMatrix<f64> {
         let mut mat = DMatrix::zeros(self.size, self.size);
         let mut idx = 0;

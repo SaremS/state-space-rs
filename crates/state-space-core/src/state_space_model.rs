@@ -1,4 +1,4 @@
-use nalgebra::{DMatrix, DVector};
+use nalgebra::{DMatrix, DVector, linalg::Cholesky};
 use rand::SeedableRng;
 use rand::rngs::StdRng;
 use std::marker::PhantomData;
@@ -262,7 +262,7 @@ impl LinearGaussianStateSpaceModel {
 
         Ok(log_likelihood)
     }
-
+/*
     fn filter_state_internal(
         &self,
         observations: &Vec<DMatrix<f64>>,
@@ -325,6 +325,98 @@ impl LinearGaussianStateSpaceModel {
 
             current_state_mean = updated_mean;
             current_state_cov = updated_cov;
+        }
+
+        (predicted_states, filtered_states)
+    }*/
+
+    fn filter_state_internal(
+        &self,
+        observations: &Vec<DMatrix<f64>>,
+        _observed_control_variables: Option<&Vec<DMatrix<f64>>>,
+    ) -> (Vec<GaussianDistribution>, Vec<GaussianDistribution>) {
+        let num_observations = observations.len();
+
+        let initial_dist = &(self.parameters.get_initial_state_dist());
+        let state_dist = &(self.parameters.get_state_dist());
+        let obs_dist = &(self.parameters.get_observation_dist());
+
+        let mut current_state_mean = initial_dist.get_mean().clone();
+        
+        let transition_matrix = self.parameters.get_transition_matrix();
+        let observation_matrix = self.parameters.get_observation_matrix();
+        
+        let d_state = current_state_mean.nrows();
+        let d_obs = observation_matrix.nrows();
+
+        let mut u_curr = initial_dist.get_cov_cholesky()
+            .l().transpose();
+            
+        let u_q = state_dist.get_cov_cholesky()
+            .l().transpose();
+            
+        let u_obs = obs_dist.get_cov_cholesky()
+            .l().transpose();
+
+        let mut predicted_states = Vec::with_capacity(num_observations);
+        let mut filtered_states = Vec::with_capacity(num_observations);
+
+        for t in 0..num_observations {
+            let predicted_mean = &transition_matrix * &current_state_mean;
+
+            let mut a_predict = DMatrix::<f64>::zeros(2 * d_state, d_state);
+            a_predict.slice_mut((0, 0), (d_state, d_state))
+                .copy_from(&(u_curr * transition_matrix.transpose()));
+            a_predict.slice_mut((d_state, 0), (d_state, d_state))
+                .copy_from(&u_q);
+
+            let qr_predict = a_predict.qr();
+            let r_predict_full = qr_predict.r();
+            
+            let u_predict = r_predict_full.slice((0, 0), (d_state, d_state)).into_owned();
+
+            predicted_states.push(
+                GaussianDistribution::new_from_params_cholesky(predicted_mean.clone(), Cholesky::pack_dirty(u_predict.transpose().clone()))
+            );
+
+            let predicted_observation_mean = &observation_matrix * &predicted_mean;
+            let current_observation = &observations[t];
+            let current_error = current_observation - &predicted_observation_mean;
+
+            let mut a_update = DMatrix::<f64>::zeros(d_obs + d_state, d_obs + d_state);
+            
+            a_update.slice_mut((0, 0), (d_obs, d_obs))
+                .copy_from(&u_obs);
+                
+            a_update.slice_mut((d_obs, 0), (d_state, d_obs))
+                .copy_from(&(&u_predict * observation_matrix.transpose()));
+                
+            a_update.slice_mut((d_obs, d_obs), (d_state, d_state))
+                .copy_from(&u_predict);
+
+            let qr_update = a_update.qr();
+            let r_update = qr_update.r(); 
+
+            let r11 = r_update.slice((0, 0), (d_obs, d_obs));
+            let r12 = r_update.slice((0, d_obs), (d_obs, d_state));
+            let r22 = r_update.slice((d_obs, d_obs), (d_state, d_state));
+
+            let r11_transpose = r11.transpose().into_owned();
+
+            let a = r11_transpose
+                .lu()
+                .solve(&current_error)
+                .expect("Failed to solve for intermediate Kalman gain. Check observation noise.");
+            let delta_x = r12.transpose() * a;
+            let updated_mean = &predicted_mean + delta_x;
+
+            u_curr = r22.into_owned();
+
+            filtered_states.push(
+                GaussianDistribution::new_from_params_cholesky(updated_mean.clone(), Cholesky::pack_dirty(u_curr.transpose().clone()))
+            );
+
+            current_state_mean = updated_mean;
         }
 
         (predicted_states, filtered_states)
