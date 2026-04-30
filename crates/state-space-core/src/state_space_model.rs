@@ -268,27 +268,28 @@ impl LinearGaussianStateSpaceModel {
         observations: &Vec<DMatrix<f64>>,
         _observed_control_variables: Option<&Vec<DMatrix<f64>>>,
     ) -> (Vec<GaussianDistribution>, Vec<GaussianDistribution>) {
-        //return predicted states AND filtered states
         let num_observations = observations.len();
 
         let initial_dist = &(self.parameters.get_initial_state_dist());
         let state_dist = &(self.parameters.get_state_dist());
         let obs_dist = &(self.parameters.get_observation_dist());
 
-        let mut current_state_mean = initial_dist.get_mean();
-        let mut current_state_cov = initial_dist.get_cov();
+        let mut current_state_mean = initial_dist.get_mean().clone();
+        let mut current_state_cov = initial_dist.get_cov().clone();
 
         let transition_matrix = self.parameters.get_transition_matrix();
         let observation_matrix = self.parameters.get_observation_matrix();
         let process_noise_cov = state_dist.get_cov();
         let observation_noise_cov = obs_dist.get_cov();
 
-        let mut predicted_states = vec![];
-        let mut filtered_states = vec![];
+        let mut predicted_states = Vec::with_capacity(num_observations);
+        let mut filtered_states = Vec::with_capacity(num_observations);
+
+        let identity = DMatrix::<f64>::identity(current_state_cov.nrows(), current_state_cov.ncols());
 
         for t in 0..num_observations {
             let next_mean = &transition_matrix * &current_state_mean;
-            let next_cov = &transition_matrix * &current_state_cov * &transition_matrix.transpose()
+            let next_cov = &transition_matrix * &current_state_cov * transition_matrix.transpose()
                 + &process_noise_cov;
 
             let predicted_state =
@@ -296,30 +297,39 @@ impl LinearGaussianStateSpaceModel {
             predicted_states.push(predicted_state);
 
             let predicted_observation_mean = &observation_matrix * &next_mean;
-            let predicted_observation_cov =
-                &observation_matrix * &next_cov * observation_matrix.transpose()
-                    + &observation_noise_cov;
+            
+            let predicted_observation_cov = &observation_matrix * &next_cov * observation_matrix.transpose()
+                + &observation_noise_cov;
 
             let current_observation = &observations[t];
-
             let current_error = current_observation - &predicted_observation_mean;
-            let kalman_gain = &next_cov
-                * observation_matrix.transpose()
-                * &predicted_observation_cov.try_inverse().unwrap();
+
+            let h_p = &observation_matrix * &next_cov;
+            let cholesky_s = predicted_observation_cov.cholesky()
+                .expect("Innovation covariance S is not positive-definite!");
+                
+            let k_transpose = cholesky_s.solve(&h_p); 
+            let kalman_gain = k_transpose.transpose();
 
             let updated_mean = &next_mean + &kalman_gain * &current_error;
-            let updated_cov = &next_cov - &kalman_gain * &observation_matrix * &next_cov;
+
+            let i_kh = &identity - &kalman_gain * &observation_matrix;
+            
+            let updated_cov = &i_kh * &next_cov * i_kh.transpose() 
+                + &kalman_gain * &observation_noise_cov * kalman_gain.transpose();
+
             let filtered_current_state =
                 GaussianDistribution::new_from_params(updated_mean.clone(), updated_cov.clone()).unwrap();
 
-            filtered_states.push(filtered_current_state.clone());
+            filtered_states.push(filtered_current_state);
 
             current_state_mean = updated_mean;
             current_state_cov = updated_cov;
         }
 
-        return (predicted_states, filtered_states);
+        (predicted_states, filtered_states)
     }
+
 }
 
 impl StateSpaceModel for LinearGaussianStateSpaceModel {
